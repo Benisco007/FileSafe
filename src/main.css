@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+
+:root {
+  --primary: #F4B400;
+  --primary-hover: #D89E00;
+  --dark: #121212;
+  --dark-2: #1E1E1E;
+  --light: #FFFFFF;
+  --background: #F5F5F5;
+  --text: #2C2C2C;
+  --success: #22C55E;
+  --danger: #EF4444;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--dark);
+  color: white;
+}
