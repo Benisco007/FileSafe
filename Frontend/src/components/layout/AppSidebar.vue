@@ -23,7 +23,7 @@ const navigate = (itemRoute) => router.push(itemRoute)
       <div class="logo-icon">
         <i class="ti ti-lock"></i>
       </div>
-      <span class="logo-name">CoffreDoc</span>
+      <span class="logo-name">FileSafe</span>
     </div>
 
     <!-- NAVIGATION PRINCIPALE -->
@@ -92,7 +92,6 @@ const navigate = (itemRoute) => router.push(itemRoute)
   flex-shrink: 0;
 }
 
-/* LOGO */
 .logo {
   display: flex;
   align-items: center;
