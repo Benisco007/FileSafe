@@ -1,14 +1,22 @@
 <script setup>
+import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
 const route = useRoute()
 
+// TODO: remplacer par les données du store Pinia (authStore.user.prenom)
+const userName = ref('Utilisateur')
+
 const navItems = [
   { label: 'Accueil', icon: 'ti-home', route: '/' },
   { label: 'Mes documents', icon: 'ti-files', route: '/documents' },
   { label: 'Dépôts partagés', icon: 'ti-users', route: '/depots' },
-  { label: 'Partages', icon: 'ti-share', route: '/shares' },
+  { label: 'Partages', icon: 'ti-share', route: '/shares' }
+]
+
+const secondaryItems = [
+  { label: 'Hors ligne', icon: 'ti-wifi-off', route: '/hors-ligne' }
 ]
 
 const isActive = (itemRoute) => route.path === itemRoute
@@ -17,13 +25,12 @@ const navigate = (itemRoute) => router.push(itemRoute)
 
 <template>
   <aside class="sidebar">
-
     <!-- LOGO -->
     <div class="logo">
       <div class="logo-icon">
         <i class="ti ti-lock"></i>
       </div>
-      <span class="logo-name">FileSafe</span>
+      <span class="logo-name">CoffreDoc</span>
     </div>
 
     <!-- NAVIGATION PRINCIPALE -->
@@ -43,27 +50,33 @@ const navigate = (itemRoute) => router.push(itemRoute)
     <div class="separator"></div>
 
     <!-- NAVIGATION SECONDAIRE -->
-    <div class="nav-secondary">
-      <div class="nav-item" @click="navigate('/notifications')">
-        <i class="ti ti-wifi-off"></i>
-        <span>Hors ligne</span>
-        <span class="badge">3</span>
+    <nav class="nav-secondary">
+      <div
+        v-for="item in secondaryItems"
+        :key="item.route"
+        :class="['nav-item', isActive(item.route) ? 'active' : '']"
+        @click="navigate(item.route)"
+      >
+        <i :class="['ti', item.icon]"></i>
+        <span>{{ item.label }}</span>
       </div>
-    </div>
+    </nav>
 
     <!-- BAS DE SIDEBAR -->
     <div class="sidebar-bottom">
-      <div class="nav-item" @click="navigate('/settings')">
+      <div
+        :class="['nav-item', isActive('/settings') ? 'active' : '']"
+        @click="navigate('/settings')"
+      >
         <i class="ti ti-settings"></i>
         <span>Paramètres</span>
       </div>
       <div class="user-row">
-        <div class="avatar">B</div>
-        <span class="user-name">Béni</span>
+        <div class="avatar">{{ userName.charAt(0).toUpperCase() }}</div>
+        <span class="user-name">{{ userName }}</span>
         <i class="ti ti-logout logout-icon"></i>
       </div>
     </div>
-
   </aside>
 </template>
 
@@ -72,12 +85,11 @@ const navigate = (itemRoute) => router.push(itemRoute)
    TAILLES — modifie uniquement ici
    ============================================ */
 .sidebar {
-  --font-logo:    22px;   /* Nom "CoffreDoc"         */
-  --font-nav:     20px;   /* Items de navigation     */
-  --font-badge:   18px;   /* Badge "3"               */
-  --font-user:    20px;   /* Nom utilisateur bas      */
-  --icon-nav:     20px;   /* Taille icônes navigation */
-  --icon-logo:    20px;   /* Taille icône logo        */
+  --font-logo:    22px;
+  --font-nav:     20px;
+  --font-user:    20px;
+  --icon-nav:     20px;
+  --icon-logo:    20px;
 }
 /* ============================================ */
 
@@ -117,11 +129,13 @@ const navigate = (itemRoute) => router.push(itemRoute)
 }
 
 /* NAVIGATION */
-.nav-main {
+.nav-main,
+.nav-secondary {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -148,29 +162,11 @@ const navigate = (itemRoute) => router.push(itemRoute)
   flex-shrink: 0;
 }
 
-/* BADGE */
-.badge {
-  margin-left: auto;
-  background: #F4B400;
-  color: #121212;
-  font-size: var(--font-badge);
-  font-weight: 500;
-  padding: 2px 7px;
-  border-radius: 20px;
-}
-
 /* SÉPARATEUR */
 .separator {
   height: 0.5px;
   background: #2a2a2a;
   margin: 16px 0;
-}
-
-/* NAVIGATION SECONDAIRE */
-.nav-secondary {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
 }
 
 /* BAS DE SIDEBAR */

@@ -7,6 +7,7 @@ import TwoFAView from '../views/Auth/TwoFAView.vue'
 import DocumentsView from '../views/DocumentsView.vue'
 import SharesView from '../views/SharesView.vue'
 import DepotsView from '../views/DepotsView.vue'
+import OfflineView from '../views/OfflineView.vue'
 import NotificationsView from '../views/NotificationsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 
@@ -23,7 +24,11 @@ const router = createRouter({
     { path: '/documents', name: 'documents', component: DocumentsView },
     { path: '/shares', name: 'shares', component: SharesView },
     { path: '/depots', name: 'depots', component: DepotsView },
+    { path: '/hors-ligne', name: 'hors-ligne', component: OfflineView },
+
+    // Notifications reste accessible si tu as la page, mais pas dans la sidebar
     { path: '/notifications', name: 'notifications', component: NotificationsView },
+
     { path: '/settings', name: 'settings', component: SettingsView },
 
     // Redirect par défaut
