@@ -9,13 +9,15 @@
       @notification="showNotification"
     />
 
-    <!-- Application principale (à développer) -->
+    <!-- Application principale -->
     <div v-else>
       <!-- Contenu de l'application -->
       <div class="app-layout">
-        <!-- Sidebar, etc. -->
+        <!-- Sidebar -->
+        <app-sidebar />
+        <!-- Vue courante (HomeView, DocumentsView, etc.) -->
         <div class="main-content">
-          <h1>Bienvenue dans CoffreDoc</h1>
+          <router-view />
         </div>
       </div>
     </div>
@@ -30,13 +32,15 @@
 
 <script>
 import LoginView from '@/views/Auth/Login.vue';
-import '@/styles/theme.css';
+import AppSidebar from '@/components/layout/AppSidebar.vue';
+import './main.css';
 
 export default {
   name: 'App',
   
   components: {
-    LoginView
+    LoginView,
+    AppSidebar
   },
 
   data() {
@@ -52,15 +56,26 @@ export default {
       this.isDark = !this.isDark;
       // Sauvegarder la préférence
       localStorage.setItem('theme', this.isDark ? 'dark' : 'light');
+      
+      // Mettre à jour la classe sur le body pour la cohérence globale
+      const body = document.body;
+      if (this.isDark) {
+        body.classList.remove('light');
+        body.classList.add('dark');
+      } else {
+        body.classList.remove('dark');
+        body.classList.add('light');
+      }
     },
 
     handleLoginSuccess(data) {
       console.log('Connexion réussie:', data);
-      this.isAuthenticated = true;
-      // Sauvegarder les données utilisateur
       if (data.user) {
         localStorage.setItem('user', JSON.stringify(data.user));
       }
+      this.isAuthenticated = true;
+      // Redirection immédiate vers la page d'accueil après authentification réussie
+      this.$router.push('/');
     },
 
     showNotification(data) {
@@ -82,12 +97,12 @@ export default {
     if (savedTheme) {
       this.isDark = savedTheme === 'dark';
     }
-    
-    // Vérifier si l'utilisateur est déjà connecté
-    const user = localStorage.getItem('user');
-    if (user) {
-      this.isAuthenticated = true;
-    }
+
+    // Sécurité : on ne restaure PAS automatiquement la session depuis localStorage.
+    // L'utilisateur doit toujours passer par la page de connexion.
+    // La session isAuthenticated est en mémoire uniquement (réinitialisée au rechargement).
+    // Quand le vrai backend JWT sera prêt, on validera le token ici avant de restaurer la session.
+    localStorage.removeItem('user');
   }
 }
 </script>
@@ -105,6 +120,18 @@ body {
   background: var(--bg-primary);
   color: var(--text-primary);
   transition: background 0.3s, color 0.3s;
+}
+
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bg-primary);
+}
+
+.main-content {
+  flex: 1;
+  min-height: 100vh;
+  overflow-y: auto;
 }
 
 .btn {

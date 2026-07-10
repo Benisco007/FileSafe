@@ -5,8 +5,9 @@ import { useRouter, useRoute } from 'vue-router'
 const router = useRouter()
 const route = useRoute()
 
-// TODO: remplacer par les données du store Pinia (authStore.user.prenom)
-const userName = ref('Utilisateur')
+// Récupérer le nom de l'utilisateur connecté depuis le localStorage
+const user = JSON.parse(localStorage.getItem('user') || '{}')
+const userName = ref(user.name || 'Utilisateur')
 
 const navItems = [
   { label: 'Accueil', icon: 'ti-home', route: '/' },
@@ -21,6 +22,12 @@ const secondaryItems = [
 
 const isActive = (itemRoute) => route.path === itemRoute
 const navigate = (itemRoute) => router.push(itemRoute)
+
+const logout = () => {
+  localStorage.removeItem('user')
+  router.push('/login')
+  window.location.reload()
+}
 </script>
 
 <template>
@@ -74,7 +81,7 @@ const navigate = (itemRoute) => router.push(itemRoute)
       <div class="user-row">
         <div class="avatar">{{ userName.charAt(0).toUpperCase() }}</div>
         <span class="user-name">{{ userName }}</span>
-        <i class="ti ti-logout logout-icon"></i>
+        <i class="ti ti-logout logout-icon" @click="logout"></i>
       </div>
     </div>
   </aside>

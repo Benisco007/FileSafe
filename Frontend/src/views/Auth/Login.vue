@@ -28,7 +28,15 @@
     </div>
 
     <div class="auth-right">
-      <theme-toggle :is-dark="isDark" @toggle="$emit('toggle-theme')" />
+      <div class="auth-header">
+        <button class="notification-btn" @click="$router.push('/notifications')">
+          <i class="ti ti-bell"></i>
+          <span class="notification-badge">3</span>
+        </button>
+        <button class="theme-toggle" @click="toggleTheme" :title="isDark ? 'Mode clair' : 'Mode sombre'">
+          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
+        </button>
+      </div>
 
       <div class="auth-form-container">
         <!-- Écran 2FA -->
@@ -110,20 +118,20 @@
 
             <div class="auth-input-row">
               <div class="input-group">
+                <i class="ti ti-user input-icon"></i>
                 <input 
                   type="text" 
                   class="input-field" 
-                  style="padding-left:14px" 
                   placeholder="Nom" 
                   v-model="registerForm.lastName"
                   required
                 />
               </div>
               <div class="input-group">
+                <i class="ti ti-user input-icon"></i>
                 <input 
                   type="text" 
                   class="input-field" 
-                  style="padding-left:14px" 
                   placeholder="Prénom" 
                   v-model="registerForm.firstName"
                   required
@@ -145,23 +153,29 @@
             <div class="input-group">
               <i class="ti ti-lock input-icon"></i>
               <input 
-                type="password" 
+                :type="showRegisterPassword ? 'text' : 'password'" 
                 class="input-field" 
                 placeholder="Mot de passe" 
                 v-model="registerForm.password"
                 required
               />
+              <button type="button" class="input-toggle" @click="showRegisterPassword = !showRegisterPassword">
+                <i :class="showRegisterPassword ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              </button>
             </div>
 
             <div class="input-group">
               <i class="ti ti-lock input-icon"></i>
               <input 
-                type="password" 
+                :type="showRegisterConfirmPassword ? 'text' : 'password'" 
                 class="input-field" 
                 placeholder="Confirmer le mot de passe" 
                 v-model="registerForm.confirmPassword"
                 required
               />
+              <button type="button" class="input-toggle" @click="showRegisterConfirmPassword = !showRegisterConfirmPassword">
+                <i :class="showRegisterConfirmPassword ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
+              </button>
             </div>
 
             <button type="submit" class="btn btn-primary auth-submit" style="margin-top:8px" :disabled="isLoading">
@@ -176,7 +190,7 @@
 </template>
 
 <script>
-import TwoFactorAuth from '@/components/Auth/TwoFactorAuth.vue';
+import TwoFactorAuth from './TwoFactorAuth.vue';
 import ThemeToggle from '@/components/Common/ThemeToggle.vue';
 
 export default {
@@ -198,6 +212,8 @@ export default {
     return {
       activeTab: 'login',
       showPassword: false,
+      showRegisterPassword: false,
+      showRegisterConfirmPassword: false,
       show2FA: false,
       isLoading: false,
       loginError: null,
@@ -219,6 +235,18 @@ export default {
   },
 
   methods: {
+    toggleTheme() {
+      const body = document.body;
+      if (body.classList.contains('light')) {
+        body.classList.remove('light');
+        body.classList.add('dark');
+      } else {
+        body.classList.remove('dark');
+        body.classList.add('light');
+      }
+      this.$emit('toggle-theme');
+    },
+
     async submitLogin() {
       if (!this.loginForm.email || !this.loginForm.password) {
         this.loginError = 'Veuillez remplir tous les champs.';
@@ -235,7 +263,7 @@ export default {
         if (response.requires2FA) {
           // L'utilisateur a besoin de 2FA
           this.show2FA = true;
-          this.$emit('login-success', { requires2FA: true });
+          // Ne pas émettre 'login-success' ici, sinon App.vue cache le formulaire !
         } else {
           // Connexion réussie sans 2FA
           this.$emit('login-success', { user: response.user });
@@ -272,7 +300,7 @@ export default {
       // Simuler la vérification du code 2FA
       return new Promise((resolve) => {
         setTimeout(() => {
-          const isValid = code === '123456';
+          const isValid = code && code.length === 6; // Accepte n'importe quel code à 6 chiffres
           if (isValid) {
             this.$emit('login-success', { 
               user: {
@@ -366,10 +394,32 @@ export default {
 </script>
 
 <style scoped>
+/* Theme Globals */
+:global(body) {
+  font-family: 'Inter', sans-serif;
+}
+:global(body.light) {
+  --bg-primary: #F5F5F5;
+  --bg-secondary: #FFFFFF;
+  --text-primary: #2C2C2C;
+  --text-secondary: #555555;
+  --border-color: #DDDDDD;
+  --primary: #F4B400;
+}
+:global(body.dark), :global(body) {
+  --bg-primary: #121212;
+  --bg-secondary: #1E1E1E;
+  --text-primary: #FFFFFF;
+  --text-secondary: #888888;
+  --border-color: #333333;
+  --primary: #F4B400;
+}
+
 .auth-layout {
   display: flex;
   min-height: 100vh;
   background: var(--bg-primary);
+  font-family: 'Inter', sans-serif;
 }
 
 .auth-left {
@@ -409,7 +459,7 @@ export default {
 }
 
 .auth-tagline {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 32px;
@@ -451,6 +501,53 @@ export default {
   background: var(--bg-primary);
 }
 
+.auth-header {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 10;
+}
+
+.notification-btn, .theme-toggle {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 8px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s;
+}
+
+.notification-btn:hover, .theme-toggle:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.notification-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--primary);
+  color: #121212;
+  font-size: 10px;
+  font-weight: bold;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .auth-form-container {
   flex: 1;
   display: flex;
@@ -487,7 +584,7 @@ export default {
 }
 
 .auth-form-title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 24px;
@@ -510,19 +607,29 @@ export default {
 
 .input-field {
   width: 100%;
-  padding: 10px 40px 10px 40px;
-  border: 1px solid var(--border-color);
+  padding: 10px 40px 10px 42px;
+  min-height: 48px;
+  border: 0.5px solid var(--border-color);
   border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
+  background: #121212;
+  color: #FFFFFF;
+  font-family: 'Inter', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.input-field::placeholder {
   font-size: 14px;
-  transition: border-color 0.2s;
+  color: #555555;
+  font-weight: 400;
 }
 
 .input-field:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  border: 1.5px solid #F4B400;
+  box-shadow: none;
+  background: #121212;
 }
 
 .input-toggle {
@@ -540,8 +647,8 @@ export default {
 .auth-link {
   display: block;
   text-align: right;
-  font-size: 13px;
-  color: var(--primary);
+  font-size: 14px;
+  color: #F4B400;
   cursor: pointer;
   margin-bottom: 20px;
 }
@@ -554,6 +661,13 @@ export default {
   width: 100%;
   padding: 12px;
   font-size: 15px;
+  font-weight: 500;
+  border-radius: 8px;
+  background: #F4B400;
+  color: #121212;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s;
 }
 
 .auth-submit:disabled {
