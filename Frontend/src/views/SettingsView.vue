@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useTheme } from '@/composables/useTheme'
 
 // ─── État de chargement ───────────────────────────────────────────
 const isLoading = ref(true)
@@ -30,7 +31,9 @@ const notificationSettings = ref({
 const offlineDocs = ref([])
 
 // ─── Apparence ────────────────────────────────────────────────────
-const isDark = ref(true)
+// Même état de thème partagé que le reste de l'application :
+// changer le thème ici s'applique donc partout, et inversement.
+const { isDark, toggleTheme } = useTheme()
 
 const themeIcon = computed(() => (isDark.value ? 'ti-moon' : 'ti-sun'))
 
@@ -54,11 +57,6 @@ const removeOfflineDoc = async (id) => {
 const terminateSession = async (id) => {
   // TODO: appeler DELETE /api/sessions/${id}
   sessions.value = sessions.value.filter((s) => s.id !== id)
-}
-
-const toggleTheme = () => {
-  isDark.value = !isDark.value
-  // TODO: propager vers le store/app (Pinia / localStorage)
 }
 
 const tabIconClass = (tab) => {
@@ -109,7 +107,7 @@ onMounted(async () => {
         <p class="subtitle">Personnalisez votre compte et vos préférences</p>
       </div>
       <div class="header-right">
-        <button class="btn-icon">
+        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
           <i :class="'ti ' + themeIcon"></i>
         </button>
       </div>
@@ -337,9 +335,9 @@ onMounted(async () => {
 <style scoped>
 .settings {
   padding: 24px 32px;
-  background-color: #121212;
+  background-color: var(--bg-primary);
   min-height: 100vh;
-  color: white;
+  color: var(--text-primary);
   font-family: 'Inter', sans-serif;
 }
 
@@ -369,13 +367,18 @@ onMounted(async () => {
 }
 
 .btn-icon {
-  background: #1E1E1E;
-  color: #aaa;
-  border: 0.5px solid #333;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 0.5px solid var(--border-color);
   border-radius: 8px;
   padding: 10px;
   cursor: pointer;
   font-size: 16px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.btn-icon:hover {
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* SKELETON */

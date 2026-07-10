@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { isDark, toggleTheme } = useTheme()
 
 // ─── ÉTAT DE CHARGEMENT ───────────────────────────────────────────
 const isLoading = ref(true)
@@ -78,6 +81,9 @@ onMounted(async () => {
       <div class="header-right">
         <button class="btn-upload">
           <i class="ti ti-upload upload-icon"></i> Téléverser un document
+        </button>
+        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
+          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
         </button>
       </div>
     </div>
@@ -202,9 +208,9 @@ onMounted(async () => {
 
 .documents-page {
   padding: 28px 36px;
-  background-color: #121212;
+  background-color: var(--bg-primary);
   min-height: 100vh;
-  color: white;
+  color: var(--text-primary);
   font-family: 'Inter', sans-serif;
 }
 
@@ -222,12 +228,18 @@ onMounted(async () => {
 }
 .subtitle { 
   font-size: var(--font-subtitle); 
-  color: #888; 
+  color: var(--text-secondary); 
   margin-top: 6px; 
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .btn-upload {
-  background: #F4B400;
+  background: var(--primary);
   color: #121212;
   border: none;
   border-radius: 10px;
@@ -240,9 +252,24 @@ onMounted(async () => {
   gap: 8px;
   transition: background 0.2s, transform 0.1s;
 }
-.btn-upload:hover { background: #D89E00; }
+.btn-upload:hover { background: var(--primary-hover); }
 .btn-upload:active { transform: scale(0.98); }
 .upload-icon { font-size: 20px; }
+
+.btn-icon {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 0.5px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.btn-icon:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}
 
 /* RECHERCHE ET FILTRES */
 .filter-zone {

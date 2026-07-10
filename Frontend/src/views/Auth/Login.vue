@@ -192,6 +192,7 @@
 <script>
 import TwoFactorAuth from './TwoFactorAuth.vue';
 import ThemeToggle from '@/components/Common/ThemeToggle.vue';
+import { useTheme } from '@/composables/useTheme';
 
 export default {
   name: 'LoginView',
@@ -201,11 +202,10 @@ export default {
     ThemeToggle
   },
 
-  props: {
-    isDark: {
-      type: Boolean,
-      default: true
-    }
+  setup() {
+    // Même état de thème partagé que le reste de l'application
+    const { isDark, toggleTheme } = useTheme();
+    return { isDark, toggleTheme };
   },
 
   data() {
@@ -235,18 +235,6 @@ export default {
   },
 
   methods: {
-    toggleTheme() {
-      const body = document.body;
-      if (body.classList.contains('light')) {
-        body.classList.remove('light');
-        body.classList.add('dark');
-      } else {
-        body.classList.remove('dark');
-        body.classList.add('light');
-      }
-      this.$emit('toggle-theme');
-    },
-
     async submitLogin() {
       if (!this.loginForm.email || !this.loginForm.password) {
         this.loginError = 'Veuillez remplir tous les champs.';
@@ -280,7 +268,7 @@ export default {
       return new Promise((resolve, reject) => {
         setTimeout(() => {
           // Simuler une vérification
-          if (credentials.email === 'beni.hountondji@email.bj' && credentials.password === 'password') {
+          if (credentials.email === 'angealossarst@gmail.com' && credentials.password === '1234') {
             resolve({
               requires2FA: true,
               user: {
@@ -394,26 +382,10 @@ export default {
 </script>
 
 <style scoped>
-/* Theme Globals */
-:global(body) {
-  font-family: 'Inter', sans-serif;
-}
-:global(body.light) {
-  --bg-primary: #F5F5F5;
-  --bg-secondary: #FFFFFF;
-  --text-primary: #2C2C2C;
-  --text-secondary: #555555;
-  --border-color: #DDDDDD;
-  --primary: #F4B400;
-}
-:global(body.dark), :global(body) {
-  --bg-primary: #121212;
-  --bg-secondary: #1E1E1E;
-  --text-primary: #FFFFFF;
-  --text-secondary: #888888;
-  --border-color: #333333;
-  --primary: #F4B400;
-}
+/* Les variables de thème (--bg-primary, --text-primary, --primary, ...)
+   sont maintenant définies une seule fois, globalement, dans main.css.
+   Elles ne doivent plus être redéfinies ici : c'est justement ce qui
+   empêchait le thème de s'appliquer correctement en dehors de cette page. */
 
 .auth-layout {
   display: flex;
@@ -611,8 +583,8 @@ export default {
   min-height: 48px;
   border: 0.5px solid var(--border-color);
   border-radius: 8px;
-  background: #121212;
-  color: #FFFFFF;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   font-family: 'Inter', sans-serif;
   font-size: 15px;
   font-weight: 500;
@@ -621,15 +593,15 @@ export default {
 
 .input-field::placeholder {
   font-size: 14px;
-  color: #555555;
+  color: var(--text-secondary);
   font-weight: 400;
 }
 
 .input-field:focus {
   outline: none;
-  border: 1.5px solid #F4B400;
+  border: 1.5px solid var(--primary);
   box-shadow: none;
-  background: #121212;
+  background: var(--bg-primary);
 }
 
 .input-toggle {
@@ -648,7 +620,7 @@ export default {
   display: block;
   text-align: right;
   font-size: 14px;
-  color: #F4B400;
+  color: var(--primary);
   cursor: pointer;
   margin-bottom: 20px;
 }
@@ -663,7 +635,7 @@ export default {
   font-size: 15px;
   font-weight: 500;
   border-radius: 8px;
-  background: #F4B400;
+  background: var(--primary);
   color: #121212;
   border: none;
   cursor: pointer;

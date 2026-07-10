@@ -1,5 +1,5 @@
 <template>
-  <div id="app" :data-theme="isDark ? 'dark' : 'light'">
+  <div id="app">
     <!-- Écran d'authentification -->
     <login-view
       v-if="!isAuthenticated"
@@ -33,6 +33,7 @@
 <script>
 import LoginView from '@/views/Auth/Login.vue';
 import AppSidebar from '@/components/layout/AppSidebar.vue';
+import { useTheme } from '@/composables/useTheme';
 import './main.css';
 
 export default {
@@ -43,31 +44,20 @@ export default {
     AppSidebar
   },
 
+  setup() {
+    // État de thème partagé par toute l'application (voir composables/useTheme.js)
+    const { isDark, toggleTheme } = useTheme();
+    return { isDark, toggleTheme };
+  },
+
   data() {
     return {
-      isDark: true,
       isAuthenticated: false,
       notification: null
     }
   },
 
   methods: {
-    toggleTheme() {
-      this.isDark = !this.isDark;
-      // Sauvegarder la préférence
-      localStorage.setItem('theme', this.isDark ? 'dark' : 'light');
-      
-      // Mettre à jour la classe sur le body pour la cohérence globale
-      const body = document.body;
-      if (this.isDark) {
-        body.classList.remove('light');
-        body.classList.add('dark');
-      } else {
-        body.classList.remove('dark');
-        body.classList.add('light');
-      }
-    },
-
     handleLoginSuccess(data) {
       console.log('Connexion réussie:', data);
       if (data.user) {
@@ -92,11 +82,7 @@ export default {
   },
 
   mounted() {
-    // Restaurer la préférence de thème
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      this.isDark = savedTheme === 'dark';
-    }
+    // Le thème est désormais restauré automatiquement par useTheme().
 
     // Sécurité : on ne restaure PAS automatiquement la session depuis localStorage.
     // L'utilisateur doit toujours passer par la page de connexion.

@@ -1,19 +1,49 @@
+/* Les @import DOIVENT être en tout premier dans un fichier CSS,
+   sinon le navigateur les ignore silencieusement.
+   C'est ce qui empêchait la police Inter et les icônes Tabler
+   de se charger correctement dans toute l'application. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+/* ============================================
+   THÈME — variables centralisées
+   Une seule source de vérité pour toute l'app.
+   Le thème actif est piloté par l'attribut
+   data-theme="dark" | "light" posé sur <html>
+   (voir src/composables/useTheme.js)
+   ============================================ */
+:root,
+[data-theme='dark'] {
+  --bg-primary: #121212;
+  --bg-secondary: #1E1E1E;
+  --bg-hover: #262626;
+  --text-primary: #FFFFFF;
+  --text-secondary: #888888;
+  --border-color: #2A2A2A;
 
-:root {
   --primary: #F4B400;
   --primary-hover: #D89E00;
-  --dark: #121212;
-  --dark-2: #1E1E1E;
-  --light: #FFFFFF;
-  --background: #F5F5F5;
-  --text: #2C2C2C;
   --success: #22C55E;
+  --warning: #F4B400;
+  --danger: #EF4444;
+}
+
+[data-theme='light'] {
+  --bg-primary: #F5F5F5;
+  --bg-secondary: #FFFFFF;
+  --bg-hover: #EDEDED;
+  --text-primary: #2C2C2C;
+  --text-secondary: #6B6B6B;
+  --border-color: #E0E0E0;
+
+  --primary: #F4B400;
+  --primary-hover: #D89E00;
+  --success: #22C55E;
+  --warning: #F4B400;
   --danger: #EF4444;
 }
 
@@ -24,8 +54,9 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
-  background-color: var(--dark);
-  color: white;
-  font-size: 16px; 
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 16px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }

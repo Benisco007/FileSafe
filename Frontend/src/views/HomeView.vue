@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { isDark, toggleTheme } = useTheme()
 
 // ─── État de chargement ───────────────────────────────────────────
 const isLoading = ref(true)
@@ -106,7 +109,10 @@ onMounted(async () => {
         <button class="btn-upload">
           <i class="ti ti-upload"></i> Téléverser un document
         </button>
-        <button class="btn-icon">
+        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
+          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
+        </button>
+        <button class="btn-icon" title="Paramètres" @click="$router.push('/settings')">
           <i class="ti ti-settings"></i>
         </button>
       </div>
@@ -270,9 +276,9 @@ onMounted(async () => {
 <style scoped>
 .home {
   padding: 24px 32px;
-  background-color: #121212;
+  background-color: var(--bg-primary);
   min-height: 100vh;
-  color: white;
+  color: var(--text-primary);
   font-family: 'Inter', sans-serif;
 }
 
@@ -284,7 +290,7 @@ onMounted(async () => {
   margin-bottom: 28px;
 }
 .header h1 { font-size: 22px; font-weight: 500; }
-.date { font-size: 13px; color: #888; margin-top: 4px; }
+.date { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 .header-right { display: flex; gap: 10px; align-items: center; }
 
 .btn-upload {
@@ -302,13 +308,18 @@ onMounted(async () => {
 }
 .btn-upload:hover { background: #D89E00; }
 .btn-icon {
-  background: #1E1E1E;
-  color: #aaa;
-  border: 0.5px solid #333;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 0.5px solid var(--border-color);
   border-radius: 8px;
   padding: 10px;
   cursor: pointer;
   font-size: 16px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.btn-icon:hover {
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* SKELETON LOADING */

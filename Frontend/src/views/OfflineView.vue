@@ -1,5 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useTheme } from '@/composables/useTheme'
+
+const { isDark, toggleTheme } = useTheme()
 
 // ─── État de chargement ───────────────────────────────────────────
 const isLoading = ref(true)
@@ -51,7 +54,10 @@ onMounted(async () => {
         <p class="subtitle">Vos documents accessibles sans connexion internet</p>
       </div>
       <div class="header-right">
-        <button class="btn-icon">
+        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
+          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
+        </button>
+        <button class="btn-icon" title="Paramètres" @click="$router.push('/settings')">
           <i class="ti ti-settings"></i>
         </button>
       </div>
@@ -121,9 +127,9 @@ onMounted(async () => {
 <style scoped>
 .offline {
   padding: 24px 32px;
-  background-color: #121212;
+  background-color: var(--bg-primary);
   min-height: 100vh;
-  color: white;
+  color: var(--text-primary);
   font-family: 'Inter', sans-serif;
 }
 
@@ -153,13 +159,18 @@ onMounted(async () => {
 }
 
 .btn-icon {
-  background: #1E1E1E;
-  color: #aaa;
-  border: 0.5px solid #333;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 0.5px solid var(--border-color);
   border-radius: 8px;
   padding: 10px;
   cursor: pointer;
   font-size: 16px;
+  transition: color 0.2s, border-color 0.2s;
+}
+.btn-icon:hover {
+  color: var(--primary);
+  border-color: var(--primary);
 }
 
 /* SKELETON */
