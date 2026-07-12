@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, validator,Field
 
 class RegisterRequest(BaseModel):
     nom: str
@@ -21,3 +21,20 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     message: str
     mail: EmailStr
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8)
+
+
+class UserInfo(BaseModel):
+    id: int
+    first_name: str
+    last_name: str
+    email: EmailStr
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserInfo
