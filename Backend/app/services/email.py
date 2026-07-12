@@ -15,7 +15,7 @@ conf = ConnectionConfig(
 
 async def send_2fa_email(mail: str, code: str):
     message = MessageSchema(
-        subject="Votre code de vérification CoffreDoc",
+        subject="Votre code de vérification FileSafe",
         recipients=[mail],
         body=f"""
         Bonjour,
@@ -25,7 +25,7 @@ async def send_2fa_email(mail: str, code: str):
         Ce code expire dans 10 minutes.
         Ne le partagez avec personne.
 
-        L'équipe Filesafe
+        L'équipe FileSafe
         """,
         subtype="plain"
     )
