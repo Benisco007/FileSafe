@@ -1,9 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import Base, engine
-from app.routers import auth
-app = FastAPI(title="Filsafe API", version="1.0.0" , description="API pour la gestion des documents")
+from app.routers import auth, dashboard
 
+app = FastAPI(title="Filsafe API", version="1.0.0" , description="API pour la gestion des documents")
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],

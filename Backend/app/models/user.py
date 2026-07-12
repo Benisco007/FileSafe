@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String , DateTime, Boolean
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 import uuid
 from datetime import datetime
@@ -16,3 +17,4 @@ class User(Base):
     date_creation=Column(DateTime,default=datetime.utcnow)
     fa_code=Column(String(6),nullable=True)
     fa_expire=Column(DateTime,nullable=True)
+    documents = relationship("Document", back_populates="user")

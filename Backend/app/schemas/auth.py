@@ -21,3 +21,12 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     message: str
     mail: EmailStr
+
+class VerifyRequest(BaseModel):
+    mail: EmailStr
+    code: str
+
+class TokenResponse(BaseModel):
+    access_token:str
+    token_type:str
+    message:str
