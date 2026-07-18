@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr, validator, Field, ConfigDict
+from uuid import UUID  
 
 class RegisterRequest(BaseModel):
     nom: str
@@ -39,7 +40,7 @@ class LoginRequest(BaseModel):
 
 class UserInfo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id_user: str
+    id_user: UUID  # <-- Changement de str à UUID ici pour accepter le format PostgreSQL
     nom: str
     prenom: str
     mail: EmailStr

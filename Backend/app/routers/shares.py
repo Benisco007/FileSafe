@@ -1,0 +1,184 @@
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
+from typing import Optional
+from datetime import datetime, timedelta
+import secrets
+
+from app.core.database import get_db
+from app.core.dependencies import get_current_user
+from app.models.user import User
+from app.models.document import Document
+from app.models.share import Share
+from app.models.journal_acces import JournalAcces
+
+router = APIRouter()
+
+
+# ── CRÉER UN LIEN DE PARTAGE ─────────────────────────────────────────────────
+@router.post("/{id_doc}/partager", status_code=201)
+def partager_document(
+    id_doc: str,
+    duree_heures: Optional[int] = 24,
+    max_telechargements: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = db.query(Document).filter(
+        Document.id_doc == id_doc,
+        Document.id_user == current_user.id_user
+    ).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé.")
+
+    token = secrets.token_urlsafe(32)
+    date_exp = datetime.utcnow() + timedelta(hours=duree_heures)
+
+    partage = Share(
+        id_doc=doc.id_doc,
+        token=token,
+        date_exp=date_exp,
+        max_telechargements=max_telechargements
+    )
+
+    db.add(partage)
+    db.commit()
+    db.refresh(partage)
+
+    return {
+        "message": "Lien de partage créé.",
+        "lien": f"http://localhost:8000/api/shares/acces/{token}",
+        "expire_le": partage.date_exp,
+        "max_telechargements": partage.max_telechargements
+    }
+
+
+# ── ACCÉDER VIA LIEN ─────────────────────────────────────────────────────────
+@router.get("/acces/{token}", status_code=200)
+def acceder_document(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    partage = db.query(Share).filter(Share.token == token).first()
+
+    if not partage:
+        raise HTTPException(status_code=404, detail="Lien invalide.")
+
+    if not partage.est_actif:
+        raise HTTPException(status_code=403, detail="Ce lien a été révoqué.")
+
+    if partage.date_exp and datetime.utcnow() > partage.date_exp:
+        raise HTTPException(status_code=403, detail="Ce lien a expiré.")
+
+    if partage.max_telechargements and partage.nb_telechargements >= partage.max_telechargements:
+        raise HTTPException(status_code=403, detail="Limite de téléchargements atteinte.")
+
+    partage.nb_telechargements += 1
+    db.commit()
+
+    journal = JournalAcces(
+        id_part=partage.id_part,
+        type_action="consultation",
+        adresse_ip=request.client.host,
+        nav_user=request.headers.get("user-agent", "")
+    )
+    db.add(journal)
+    db.commit()
+
+    doc = partage.document
+    return {
+        "nom_doc": doc.nom_doc,
+        "type_doc": doc.type_doc,
+        "categorie": doc.categorie,
+        "date_ajout": doc.date_ajout,
+        "lien_telechargement": f"http://localhost:8000/api/shares/telecharger/{token}"
+    }
+
+
+# ── TÉLÉCHARGER VIA LIEN ──────────────────────────────────────────────────────
+@router.get("/telecharger/{token}", status_code=200)
+def telecharger_via_lien(
+    token: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    from fastapi.responses import FileResponse
+    import os
+
+    partage = db.query(Share).filter(Share.token == token).first()
+
+    if not partage or not partage.est_actif:
+        raise HTTPException(status_code=404, detail="Lien invalide ou révoqué.")
+
+    if partage.date_exp and datetime.utcnow() > partage.date_exp:
+        raise HTTPException(status_code=403, detail="Lien expiré.")
+
+    journal = JournalAcces(
+        id_part=partage.id_part,
+        type_action="telechargement",
+        adresse_ip=request.client.host,
+        nav_user=request.headers.get("user-agent", "")
+    )
+    db.add(journal)
+    db.commit()
+
+    doc = partage.document
+    if not os.path.exists(doc.chemin_fichier):
+        raise HTTPException(status_code=404, detail="Fichier introuvable.")
+
+    return FileResponse(
+        path=doc.chemin_fichier,
+        filename=doc.nom_doc,
+        media_type=doc.type_doc
+    )
+
+
+# ── RÉVOQUER UN LIEN ─────────────────────────────────────────────────────────
+@router.patch("/{id_part}/revoquer", status_code=200)
+def revoquer_lien(
+    id_part: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    partage = db.query(Share).filter(Share.id_part == id_part).first()
+
+    if not partage:
+        raise HTTPException(status_code=404, detail="Partage non trouvé.")
+
+    if str(partage.document.id_user) != str(current_user.id_user):
+        raise HTTPException(status_code=403, detail="Action non autorisée.")
+
+    partage.est_actif = False
+    db.commit()
+
+    return {"message": "Lien révoqué avec succès."}
+
+
+# ── JOURNAL D'ACCÈS ───────────────────────────────────────────────────────────
+@router.get("/{id_doc}/journal", status_code=200)
+def journal_acces(
+    id_doc: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    doc = db.query(Document).filter(
+        Document.id_doc == id_doc,
+        Document.id_user == current_user.id_user
+    ).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé.")
+
+    entrees = []
+    for partage in doc.partages:
+        for journal in partage.journal_acces:
+            entrees.append({
+                "type_action": journal.type_action,
+                "date_action": journal.date_action,
+                "adresse_ip": journal.adresse_ip,
+                "nav_user": journal.nav_user
+            })
+
+    entrees.sort(key=lambda x: x["date_action"], reverse=True)
+    return entrees
