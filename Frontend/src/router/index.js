@@ -1,15 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 import HomeView from '../views/HomeView.vue'
-import LoginView from '../views/Auth/Login.vue'
+import LoginView from '../views/Auth/LoginView.vue'
 import RegisterView from '../views/Auth/RegisterView.vue'
-import TwoFAView from '../components/layout/Auth/TwoFactorAuth.vue'
+import TwoFAView from '../views/Auth/TwoFAView.vue'
+import TwoFALoginView from '../views/Auth/TwoFALoginView.vue'
 import DocumentsView from '../views/DocumentsView.vue'
 import SharesView from '../views/SharesView.vue'
 import DepotsView from '../views/DepotsView.vue'
-import OfflineView from '../views/OfflineView.vue'
 import NotificationsView from '../views/NotificationsView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import AdminView from '../views/AdminView.vue'
+import OfflineView from '../views/OfflineView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,22 +21,33 @@ const router = createRouter({
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: RegisterView },
     { path: '/2fa', name: '2fa', component: TwoFAView },
+    { path: '/2fa-login', name: '2fa-login', component: TwoFALoginView },
 
     // App
-    { path: '/', name: 'home', component: HomeView },
-    { path: '/documents', name: 'documents', component: DocumentsView },
-    { path: '/shares', name: 'shares', component: SharesView },
-    { path: '/depots', name: 'depots', component: DepotsView },
-    { path: '/hors-ligne', name: 'hors-ligne', component: OfflineView },
-
-    // Notifications reste accessible si tu as la page, mais pas dans la sidebar
-    { path: '/notifications', name: 'notifications', component: NotificationsView },
-
-    { path: '/settings', name: 'settings', component: SettingsView },
+    { path: '/', name: 'home', component: HomeView, meta: { requiresAuth: true } },
+    { path: '/documents', name: 'documents', component: DocumentsView, meta: { requiresAuth: true } },
+    { path: '/shares', name: 'shares', component: SharesView, meta: { requiresAuth: true } },
+    { path: '/depots', name: 'depots', component: DepotsView, meta: { requiresAuth: true } },
+    { path: '/offline', name: 'offline', component: OfflineView, meta: { requiresAuth: true } },
+    { path: '/notifications', name: 'notifications', component: NotificationsView, meta: { requiresAuth: true } },
+    { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true } },
+    { path: '/admin', name: 'admin', component: AdminView, meta: { requiresAuth: true, requiresAdmin: true } },
 
     // Redirect par défaut
     { path: '/:pathMatch(.*)*', redirect: '/login' }
   ]
+})
+
+router.beforeEach((to, from) => {
+  const authStore = useAuthStore()
+  
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return '/login'
+  }
+  
+  if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
+    return '/'
+  }
 })
 
 export default router

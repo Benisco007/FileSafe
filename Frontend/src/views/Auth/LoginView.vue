@@ -1,18 +1,15 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../stores/auth'
 import api from '../../api'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
-const nom = ref('')
-const prenom = ref('')
 const email = ref('')
 const password = ref('')
-const confirmPassword = ref('')
 const showPassword = ref(false)
-const showConfirmPassword = ref(false)
-
 const isLoading = ref(false)
 const errorMsg = ref('')
 const isDarkMode = ref(true)
@@ -35,45 +32,32 @@ const toggleTheme = () => {
   }
 }
 
-const validatePassword = (pwd) => {
-  const minLength = pwd.length >= 8
-  const hasUpperCase = /[A-Z]/.test(pwd)
-  const hasNumber = /[0-9]/.test(pwd)
-  return minLength && hasUpperCase && hasNumber
-}
-
-const handleRegister = async () => {
-  errorMsg.value = ''
-
-  if (!nom.value || !prenom.value || !email.value || !password.value || !confirmPassword.value) {
+const handleLogin = async () => {
+  if (!email.value || !password.value) {
     errorMsg.value = 'Veuillez remplir tous les champs.'
-    return
-  }
-
-  if (password.value !== confirmPassword.value) {
-    errorMsg.value = 'Les mots de passe ne correspondent pas.'
-    return
-  }
-
-  if (!validatePassword(password.value)) {
-    errorMsg.value = 'Le mot de passe doit contenir 8 caractères, 1 majuscule et 1 chiffre.'
     return
   }
 
   try {
     isLoading.value = true
-    const { data } = await api.post('/api/auth/register', {
-      nom: nom.value,
-      prenom: prenom.value,
-      mail: email.value,
-      pswd: password.value
+    errorMsg.value = ''
+    const { data } = await api.post('/api/auth/login', {
+      email: email.value,
+      password: password.value
     })
+      if (data.requires_2fa) {
 
-    localStorage.setItem('pending_email', email.value)
-    router.push('/2fa')
+    localStorage.setItem('pending_2fa_email', data.mail)
+    router.push('/2fa-login')  // nouvelle route
+    } else {
+      localStorage.setItem('token', data.access_token)
+      authStore.setAuth(data.access_token, data.user)
+      router.push('/')
+    }
   } catch (err) {
-    console.error(err)
-    errorMsg.value = err.response?.data?.message || 'Erreur lors de l\'inscription.'
+    console.error('Erreur login complète:', err)
+    console.error('Response data:', err.response?.data)
+    errorMsg.value = err.response?.data?.detail || err.response?.data?.message || 'Identifiants invalides.'
   } finally {
     isLoading.value = false
   }
@@ -123,30 +107,14 @@ const handleRegister = async () => {
 
       <div class="auth-card">
         <div class="tabs">
-          <button class="tab" @click="router.push('/login')">Connexion</button>
-          <button class="tab active">Inscription</button>
+          <button class="tab active">Connexion</button>
+          <button class="tab" @click="router.push('/register')">Inscription</button>
         </div>
 
         <div class="form-container">
-          <h2>Créer un compte</h2>
+          <h2>Heureux de vous revoir 👋</h2>
           
-          <form @submit.prevent="handleRegister" class="auth-form">
-            
-            <div class="row">
-              <div class="form-group flex-1">
-                <label>Nom</label>
-                <div class="input-wrapper no-icon">
-                  <input type="text" v-model="nom" placeholder="Nom" required>
-                </div>
-              </div>
-              <div class="form-group flex-1">
-                <label>Prénom</label>
-                <div class="input-wrapper no-icon">
-                  <input type="text" v-model="prenom" placeholder="Prénom" required>
-                </div>
-              </div>
-            </div>
-
+          <form @submit.prevent="handleLogin" class="auth-form">
             <div class="form-group">
               <label>Adresse email</label>
               <div class="input-wrapper">
@@ -156,7 +124,10 @@ const handleRegister = async () => {
             </div>
 
             <div class="form-group">
-              <label>Mot de passe</label>
+              <div class="label-row">
+                <label>Mot de passe</label>
+                <a href="#" class="forgot-link">Mot de passe oublié ?</a>
+              </div>
               <div class="input-wrapper">
                 <i class="ti ti-lock input-icon"></i>
                 <input :type="showPassword ? 'text' : 'password'" v-model="password" placeholder="••••••••" required>
@@ -166,19 +137,8 @@ const handleRegister = async () => {
               </div>
             </div>
 
-            <div class="form-group">
-              <label>Confirmer le mot de passe</label>
-              <div class="input-wrapper">
-                <i class="ti ti-lock input-icon"></i>
-                <input :type="showConfirmPassword ? 'text' : 'password'" v-model="confirmPassword" placeholder="••••••••" required>
-                <button type="button" class="toggle-password" @click="showConfirmPassword = !showConfirmPassword">
-                  <i :class="showConfirmPassword ? 'ti ti-eye-off' : 'ti ti-eye'"></i>
-                </button>
-              </div>
-            </div>
-
             <button type="submit" class="btn-primary" :disabled="isLoading">
-              {{ isLoading ? 'Chargement...' : 'Créer mon compte' }}
+              {{ isLoading ? 'Chargement...' : 'Se connecter' }}
             </button>
             
             <p v-if="errorMsg" class="error-msg"><i class="ti ti-alert-circle"></i> {{ errorMsg }}</p>
@@ -194,7 +154,7 @@ const handleRegister = async () => {
   display: flex;
   min-height: 100vh;
   font-family: 'Inter', sans-serif;
-  background-color: var(--bg-card);
+  background-color: var(--bg-card); /* Background right by default on mobile */
 }
 
 /* --- Left Column --- */
@@ -315,6 +275,7 @@ const handleRegister = async () => {
   max-width: 480px;
   background-color: var(--bg-card);
   border-radius: 18px;
+  /* On desktop it blends with background, on mobile we can add shadow if needed */
 }
 
 /* Tabs */
@@ -362,25 +323,32 @@ const handleRegister = async () => {
   gap: 20px;
 }
 
-.row {
-  display: flex;
-  gap: 16px;
-}
-
-.flex-1 {
-  flex: 1;
-}
-
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
+.label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .form-group label {
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
+}
+
+.forgot-link {
+  color: var(--primary);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
 }
 
 .input-wrapper {
@@ -409,10 +377,6 @@ const handleRegister = async () => {
   font-family: 'Inter', sans-serif;
   outline: none;
   transition: border-color 0.2s;
-}
-
-.input-wrapper.no-icon input {
-  padding-left: 16px;
 }
 
 .input-wrapper input:focus {

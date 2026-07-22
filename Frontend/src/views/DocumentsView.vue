@@ -1,439 +1,592 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useTheme } from '@/composables/useTheme'
+import { ref, watch, onMounted } from 'vue'
+import api from '../api'
+import StatusBadge from '../components/shared/StatusBadge.vue'
+import UploadModal from '../components/documents/UploadModal.vue'
+import ShareModal from '../components/documents/ShareModal.vue'
+import PreviewModal from '../components/documents/PreviewModal.vue'
 
-const { isDark, toggleTheme } = useTheme()
-
-// ─── ÉTAT DE CHARGEMENT ───────────────────────────────────────────
-const isLoading = ref(true)
-
-// ─── FILTRES ET RECHERCHE ─────────────────────────────────────────
-const searchQuery = ref('')
-const selectedCategory = ref('Tous')
-
-// Catégories enrichies avec des icônes Tabler pour un rendu visuel pro
-const categories = [
-  { label: 'Tous', icon: 'ti-layout-grid' },
-  { label: 'Identité', icon: 'ti-id' },
-  { label: 'Diplômes', icon: 'ti-certificate' },
-  { label: 'Santé', icon: 'ti-heart-rate-monitor' },
-  { label: 'Contrats', icon: 'ti-file-contract' },
-  { label: 'Divers', icon: 'ti-folder' }
-]
-
-// ─── DONNÉES INITIALES VIDES (ENTITÉ FICHIERS) ────────────────────
-// Fidèle à ta logique : tableau vide au départ, rempli par l'API
 const documents = ref([])
+const isLoading = ref(true)
+const searchQuery = ref('')
+const activeCategory = ref('Tous')
+const isUploadModalOpen = ref(false)
+const isShareModalOpen = ref(false)
+const selectedDocToShare = ref(null)
 
-// ─── BADGES DE STATUT (CHARTE GRAPHIQUE) ──────────────────────────
-const badgeClass = (statut) => {
-  if (statut === 'Valide') return 'badge-valide'
-  if (statut === 'Expire bientôt') return 'badge-warning'
-  return 'badge-expire'
-}
+const isPreviewModalOpen = ref(false)
+const previewUrl = ref('')
+const previewName = ref('')
+const previewMime = ref('')
+const previewBlob = ref(null)
 
-// ─── FILTRAGE RÉACTIF (COMPUTED) ──────────────────────────────────
-const filteredDocuments = computed(() => {
-  if (!documents.value) return []
-  return documents.value.filter(doc => {
-    const matchesSearch = doc.nom_fich?.toLowerCase().includes(searchQuery.value.toLowerCase())
-    const matchesCategory = selectedCategory.value === 'Tous' || doc.categorie === selectedCategory.value
-    return matchesSearch && matchesCategory
-  })
-})
+const categories = ['Tous', 'Identité', 'Diplômes', 'Santé', 'Contrats', 'Divers']
 
-// ─── FONCTIONS ASYNCHRONES EN ATTENTE DU BACKEND FASTAPI ──────────
 const fetchDocuments = async () => {
-  // TODO: remplacer par → const res = await fetch('/api/documents')
-  // documents.value = await res.json()
-}
-
-const handleDeleteDocument = async (id) => {
-  // TODO: remplacer par → await fetch(`/api/documents/${id}`, { method: 'DELETE' })
-}
-
-const handleToggleIA = async (doc) => {
-  // TODO: remplacer par l'appel API lié à l'analyse Gemini
-}
-
-// ─── DÉCLENCHEMENT AU CHARGEMENT DE LA PAGE ──────────────────────
-onMounted(async () => {
   try {
-    await Promise.all([
-      fetchDocuments()
-    ])
-  } catch (error) {
-    console.error('Erreur chargement documents :', error)
+    isLoading.value = true
+    const params = {}
+    if (searchQuery.value) params.recherche = searchQuery.value
+    if (activeCategory.value !== 'Tous') params.categorie = activeCategory.value
+
+    const { data } = await api.get('/api/documents/', { params })
+    documents.value = data
+  } catch (err) {
+    console.error('Erreur lors de la récupération des documents', err)
   } finally {
     isLoading.value = false
   }
+}
+
+let timeoutId = null
+watch(searchQuery, () => {
+  clearTimeout(timeoutId)
+  timeoutId = setTimeout(() => {
+    fetchDocuments()
+  }, 300)
 })
+
+watch(activeCategory, () => {
+  fetchDocuments()
+})
+
+onMounted(() => {
+  fetchDocuments()
+})
+
+const getFileIcon = (mimeType) => {
+  if (!mimeType) return 'ti-file'
+  if (mimeType.includes('pdf')) return 'ti-file-type-pdf text-danger'
+  if (mimeType.includes('image')) return 'ti-photo text-primary'
+  if (mimeType.includes('word')) return 'ti-file-type-doc text-info'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'ti-file-type-xls text-success'
+  return 'ti-file'
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(new Date(dateString))
+}
+
+const toggleCritique = async (doc) => {
+  try {
+    await api.patch(`/api/documents/${doc.id_doc}/marquer-critique`)
+    doc.est_critique = !doc.est_critique
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+const toggleIA = async (doc) => {
+  try {
+    await api.patch(`/api/documents/${doc.id_doc}/autoriser-ia`)
+    doc.autorise_ia = !doc.autorise_ia
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+const downloadDoc = async (id) => {
+  try {
+    const { data, headers } = await api.get(`/api/documents/${id}/telecharger`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([data]))
+    const link = document.createElement('a')
+    link.href = url
+    
+    // Tentative de récupération du nom de fichier
+    let fileName = 'document'
+    const contentDisposition = headers['content-disposition']
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="(.+)"/)
+      if (match && match[1]) fileName = match[1]
+    }
+    
+    link.setAttribute('download', fileName)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  } catch (err) {
+    console.error(err)
+  }
+}
+
+const deleteDoc = async (id) => {
+  if (confirm('Êtes-vous sûr de vouloir supprimer ce document ? Cette action est irréversible.')) {
+    try {
+      await api.delete(`/api/documents/${id}`)
+      fetchDocuments()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+}
+
+const openShareModal = (doc) => {
+  selectedDocToShare.value = doc
+  isShareModalOpen.value = true
+}
+
+const previewDoc = async (doc) => {
+  try {
+    const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger?inline=true`, { responseType: 'blob' })
+    const type = doc.type_mime || doc.type_doc || headers['content-type'] || 'application/pdf'
+    const blob = new Blob([data], { type })
+    
+    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+    
+    previewBlob.value = blob
+    previewUrl.value = URL.createObjectURL(blob)
+    previewName.value = doc.nom_doc
+    previewMime.value = type
+    isPreviewModalOpen.value = true
+  } catch (err) {
+    console.error('Erreur lors de la prévisualisation', err)
+    alert("Impossible de charger l'aperçu de ce document.")
+  }
+}
 </script>
 
 <template>
-  <div class="documents-page">
-    
-    <div class="header">
-      <div class="header-left">
-        <h1>Mes documents</h1>
-        <p class="subtitle">Gérez et organisez tous vos documents officiels en un clin d'œil</p>
-      </div>
-      <div class="header-right">
-        <button class="btn-upload">
-          <i class="ti ti-upload upload-icon"></i> Téléverser un document
-        </button>
-        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
-          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
-        </button>
-      </div>
+  <div class="documents-view">
+    <div class="page-header">
+      <h1>Mes documents</h1>
+      <button class="btn-primary" @click="isUploadModalOpen = true">
+        <i class="ti ti-plus"></i> Nouveau document
+      </button>
     </div>
 
-    <div class="filter-zone">
-      <div class="search-container">
-        <i class="ti ti-search search-icon"></i>
-        <input 
-          v-model="searchQuery"
-          type="text" 
-          placeholder="Rechercher par nom de document, catégorie, date d'ajout..." 
-          class="input-search"
-        />
+    <div class="filters-bar">
+      <div class="search-box">
+        <i class="ti ti-search"></i>
+        <input type="text" v-model="searchQuery" placeholder="Rechercher un document...">
       </div>
 
-      <div class="categories-tabs">
+      <div class="pills-container">
         <button 
           v-for="cat in categories" 
-          :key="cat.label"
-          @click="selectedCategory = cat.label"
-          :class="['tab-pill', selectedCategory === cat.label ? 'active' : '']"
+          :key="cat"
+          :class="['pill', { active: activeCategory === cat }]"
+          @click="activeCategory = cat"
         >
-          <i :class="['ti', cat.icon, 'tab-icon']"></i>
-          <span>{{ cat.label }}</span>
+          {{ cat }}
         </button>
       </div>
     </div>
 
-    <div v-if="isLoading" class="loading-state">
-      <div class="skeleton skeleton-table"></div>
+    <!-- Loading State -->
+    <div v-if="isLoading" class="skeleton-list">
+      <div class="skeleton-item" v-for="i in 5" :key="i"></div>
     </div>
 
-    <div v-else class="card table-card">
-      
-      <div v-if="filteredDocuments.length === 0" class="empty-state">
-        <div class="empty-icon-wrapper">
-          <i class="ti ti-folder-off empty-icon"></i>
+    <!-- Empty State -->
+    <div v-else-if="documents.length === 0" class="empty-state">
+      <div class="empty-icon">
+        <i class="ti ti-folder-off"></i>
+      </div>
+      <h2>Aucun document trouvé</h2>
+      <p>Essayez de modifier vos filtres ou ajoutez un nouveau document.</p>
+    </div>
+
+    <!-- Documents List -->
+    <div v-else class="documents-list">
+      <div class="document-card" v-for="doc in documents" :key="doc.id_doc">
+        <div class="doc-main-info">
+          <div class="doc-icon">
+            <i :class="['ti', getFileIcon(doc.type_mime)]"></i>
+          </div>
+          <div class="doc-text">
+            <h3 class="doc-title">{{ doc.nom_doc }}</h3>
+            <div class="doc-meta">
+              <span class="category">{{ doc.categorie }}</span>
+              <span class="dot">•</span>
+              <span class="date">Ajouté le {{ formatDate(doc.date_ajout) }}</span>
+            </div>
+          </div>
         </div>
-        <p>Aucun document pour l'instant</p>
-        <span>Les fichiers de votre coffre-fort numérique apparaîtront dans cet espace dès que vous les aurez synchronisés avec le serveur.</span>
-      </div>
 
-      <div v-else class="table-wrapper">
-        <table class="custom-table">
-          <thead>
-            <tr>
-              <th>Document</th>
-              <th>Catégorie</th>
-              <th>Ajouté le</th>
-              <th>Expiration</th>
-              <th>Statut</th>
-              <th class="text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="doc in filteredDocuments" :key="doc.id">
-              <td class="col-filename">
-                <div class="file-info">
-                  <span class="file-icon-box">
-                    <i v-if="doc.type_fich === 'PDF'" class="ti ti-file-text"></i>
-                    <i v-else-if="doc.type_fich === 'IMAGE'" class="ti ti-photo"></i>
-                    <i v-else class="ti ti-file"></i>
-                  </span>
-                  <div class="file-name-meta">
-                    <span class="file-name">{{ doc.nom_fich }}</span>
-                    <span class="file-size">{{ doc.taille_fich }}</span>
-                  </div>
-                </div>
-              </td>
-              <td class="col-text">{{ doc.categorie }}</td>
-              <td class="col-text">{{ doc.date_ajout }}</td>
-              <td class="col-text">{{ doc.date_exp }}</td>
-              <td>
-                <span :class="['badge', badgeClass(doc.status)]">
-                  {{ doc.status }}
-                </span>
-              </td>
-              <td class="col-actions">
-                <div class="actions-group">
-                  <button @click="handleToggleIA(doc)" class="btn-action" title="Analyse IA (Gemini)">
-                    <i class="ti ti-brain"></i>
-                  </button>
-                  <button class="btn-action" title="Consulter le fichier">
-                    <i class="ti ti-eye"></i>
-                  </button>
-                  <button @click="handleDeleteDocument(doc.id)" class="btn-action btn-delete" title="Supprimer">
-                    <i class="ti ti-trash"></i>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+        <div class="doc-status">
+          <StatusBadge :statut="doc.statut" :date_exp="doc.date_exp" />
+        </div>
 
+        <div class="doc-actions">
+          <button class="action-btn" title="Aperçu" @click="previewDoc(doc)">
+            <i class="ti ti-eye"></i>
+          </button>
+          <button class="action-btn" title="Télécharger" @click="downloadDoc(doc.id_doc)">
+            <i class="ti ti-download"></i>
+          </button>
+          <button class="action-btn" title="Partager" @click="openShareModal(doc)">
+            <i class="ti ti-share"></i>
+          </button>
+          <button 
+            :class="['action-btn', { active: doc.est_critique }]" 
+            title="Marquer critique / Hors ligne"
+            @click="toggleCritique(doc)"
+          >
+            <i class="ti ti-wifi-off"></i>
+          </button>
+          <button 
+            :class="['action-btn', { active: doc.autorise_ia }]" 
+            title="Autoriser l'analyse IA"
+            @click="toggleIA(doc)"
+          >
+            <i class="ti ti-robot"></i>
+          </button>
+          <button class="action-btn text-danger hover-danger" title="Supprimer" @click="deleteDoc(doc.id_doc)">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
+      </div>
     </div>
 
+    <!-- Floating Action Button pour Mobile -->
+    <button class="fab" @click="isUploadModalOpen = true">
+      <i class="ti ti-plus"></i>
+    </button>
+
+    <UploadModal 
+      :isOpen="isUploadModalOpen" 
+      @close="isUploadModalOpen = false"
+      @uploaded="fetchDocuments"
+    />
+
+    <ShareModal
+      v-if="isShareModalOpen"
+      :document="selectedDocToShare"
+      @close="isShareModalOpen = false"
+    />
+
+    <PreviewModal
+      :isOpen="isPreviewModalOpen"
+      :fileUrl="previewUrl"
+      :fileName="previewName"
+      :mimeType="previewMime"
+      :fileBlob="previewBlob"
+      @close="isPreviewModalOpen = false"
+    />
   </div>
 </template>
 
 <style scoped>
-/* ==========================================================================
-   VARIABLES DE TAILLES — Modifie facilement les polices ici
-   ========================================================================== */
-.documents-page {
-  --font-title:       26px;  /* Titre "Mes documents"             */
-  --font-subtitle:    15px;  /* Sous-titre en-tête                */
-  --font-search:      15px;  /* Texte de la barre de recherche    */
-  --font-tabs:        14px;  /* Onglets de catégories             */
-  --font-th:          13px;  /* En-têtes du tableau (UPPERCASE)   */
-  --font-td:          15px;  /* Contenu du tableau (Nom, date...) */
-  --font-meta:        13px;  /* Taille du fichier (ex: 1.2 Mo)    */
-  --font-badge:       12px;  /* Badges de statut                  */
-  
-  --icon-search:      20px;  /* Icône loupe                       */
-  --icon-tab:         18px;  /* Icônes dans les onglets           */
-  --icon-file:        24px;  /* Icônes PDF / Word                 */
-  --icon-actions:     20px;  /* Icônes Œil, Cerveau, Poubelle     */
-  --icon-empty:       48px;  /* Grosse icône d'état vide          */
-}
-/* ========================================================================== */
-
-.documents-page {
-  padding: 28px 36px;
-  background-color: var(--bg-primary);
-  min-height: 100vh;
-  color: var(--text-primary);
-  font-family: 'Inter', sans-serif;
+.documents-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: relative;
+  min-height: calc(100vh - 100px);
 }
 
-/* EN-TÊTE */
-.header {
+.page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 32px;
-}
-.header h1 { 
-  font-size: var(--font-title); 
-  font-weight: 600; 
-  letter-spacing: -0.02em; 
-}
-.subtitle { 
-  font-size: var(--font-subtitle); 
-  color: var(--text-secondary); 
-  margin-top: 6px; 
 }
 
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.btn-upload {
-  background: var(--primary);
-  color: #121212;
+.btn-primary {
+  background-color: var(--primary);
+  color: var(--bg-primary);
   border: none;
-  border-radius: 10px;
-  padding: 12px 22px;
+  padding: 10px 20px;
+  border-radius: 8px;
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background 0.2s, transform 0.1s;
-}
-.btn-upload:hover { background: var(--primary-hover); }
-.btn-upload:active { transform: scale(0.98); }
-.upload-icon { font-size: 20px; }
-
-.btn-icon {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 0.5px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px;
-  cursor: pointer;
-  font-size: 16px;
-  transition: color 0.2s, border-color 0.2s;
-}
-.btn-icon:hover {
-  color: var(--primary);
-  border-color: var(--primary);
+  transition: background-color 0.2s;
 }
 
-/* RECHERCHE ET FILTRES */
-.filter-zone {
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+/* Filtres */
+.filters-bar {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  margin-bottom: 28px;
-}
-.search-container { position: relative; width: 100%; }
-.search-icon { 
-  position: absolute; 
-  left: 18px; 
-  top: 50%; 
-  transform: translateY(-50%); 
-  color: #666; 
-  font-size: var(--icon-search); 
-}
-.input-search {
-  width: 100%;
-  background: #1E1E1E;
-  border: 1px solid #2a2a2a;
+  gap: 16px;
+  background-color: var(--bg-card);
+  padding: 16px;
   border-radius: 12px;
-  padding: 14px 16px 14px 50px;
-  color: white;
-  font-size: var(--font-search);
+}
+
+@media (min-width: 768px) {
+  .filters-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+}
+
+.search-box i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  font-size: 18px;
+}
+
+.search-box input {
+  width: 100%;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
+  padding: 10px 16px 10px 40px;
+  border-radius: 8px;
+  font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
 }
-.input-search:focus { border-color: #F4B400; }
-.input-search::placeholder { color: #555; }
 
-/* ONGLETS AVEC ICÔNES */
-.categories-tabs { display: flex; flex-wrap: wrap; gap: 10px; }
-.tab-pill {
-  background: #1E1E1E;
+.search-box input:focus {
+  border-color: var(--primary);
+}
+
+.pills-container {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pill {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--input-border);
   color: #aaa;
-  border: 1px solid #2a2a2a;
-  padding: 8px 18px;
-  border-radius: 24px;
-  font-size: var(--font-tabs);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   transition: all 0.2s;
 }
-.tab-pill:hover { background: #262626; color: white; border-color: #444; }
-.tab-pill.active { 
-  background: #F4B400; 
-  color: #121212; 
-  border-color: #F4B400; 
-  font-weight: 600; 
-}
-.tab-icon { font-size: var(--icon-tab); }
 
-/* SKELETON */
-.skeleton-table {
-  height: 350px;
-  background: linear-gradient(90deg, #1E1E1E 25%, #2a2a2a 50%, #1E1E1E 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 18px;
+.pill:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
 }
-@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-/* TABLEAU ET CARTES */
-.card { 
-  background: #1E1E1E; 
-  border-radius: 18px; 
-  padding: 24px; 
-  border: 1px solid #2a2a2a; 
+.pill.active {
+  background-color: rgba(244, 180, 0, 0.15);
+  border-color: var(--primary);
+  color: var(--primary);
 }
-.table-wrapper { overflow-x: auto; }
-.custom-table { 
-  width: 100%; 
-  border-collapse: collapse; 
-  text-align: left; 
-}
-.custom-table th { 
-  color: #888; 
-  font-weight: 600; 
-  padding: 16px 18px; 
-  border-bottom: 1px solid #2a2a2a; 
-  font-size: var(--font-th); 
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.custom-table td { 
-  padding: 18px; 
-  border-bottom: 1px solid rgba(42, 42, 42, 0.5); 
-  font-size: var(--font-td);
-}
-.custom-table tbody tr:hover { background: rgba(255, 255, 255, 0.02); }
 
-.file-info { display: flex; align-items: center; gap: 14px; }
-.file-icon-box { 
-  width: 44px; 
-  height: 44px; 
-  background: rgba(244, 180, 0, 0.1); 
-  color: #F4B400; 
-  border-radius: 10px; 
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  font-size: var(--icon-file);
-  flex-shrink: 0;
+/* Liste de documents */
+.documents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
-.file-name-meta { display: flex; flex-direction: column; gap: 3px; }
-.file-name { color: white; font-weight: 500; }
-.file-size { font-size: var(--font-meta); color: #777; }
-.col-text { color: #bbb; }
 
-/* BADGES */
-.badge { 
-  font-size: var(--font-badge); 
-  font-weight: 600; 
-  padding: 5px 12px; 
-  border-radius: 20px; 
+.document-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--bg-card);
+  padding: 16px 20px;
+  border-radius: 12px;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
-.badge-valide { background: rgba(34, 197, 94, 0.15); color: #22C55E; }
-.badge-warning { background: rgba(244, 180, 0, 0.15); color: #F4B400; }
-.badge-expire { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
 
-/* ACTIONS (ICÔNES BIEN VISIBLES) */
-.actions-group { display: flex; gap: 14px; justify-content: center; }
-.btn-action { 
-  background: #252525; 
-  border: 1px solid #333; 
-  color: #aaa; 
-  cursor: pointer; 
-  font-size: var(--icon-actions); 
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+.document-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.doc-main-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 2;
+}
+
+.doc-icon {
+  width: 48px;
+  height: 48px;
+  background-color: var(--bg-primary);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 24px;
+}
+
+.text-danger { color: var(--danger) !important; }
+.text-primary { color: var(--primary) !important; }
+.text-info { color: #3B82F6 !important; }
+.text-success { color: var(--success) !important; }
+
+.doc-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.doc-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.doc-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.category {
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.doc-status {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.doc-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
   transition: all 0.2s;
 }
-.btn-action:hover { background: #333; color: white; border-color: #555; }
-.btn-action.btn-delete:hover { background: rgba(239, 68, 68, 0.15); color: #EF4444; border-color: rgba(239, 68, 68, 0.3); }
 
-/* ÉTAT VIDE BIEN MIS EN VALEUR */
+.action-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary);
+}
+
+.action-btn.active {
+  color: var(--primary);
+  background-color: rgba(244, 180, 0, 0.1);
+}
+
+.hover-danger:hover {
+  color: var(--danger);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+/* Skeleton */
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.skeleton-item {
+  height: 80px;
+  background-color: var(--bg-card);
+  border-radius: 12px;
+  animation: pulse 1.5s infinite;
+}
+
+/* Empty State */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 64px 20px;
-  gap: 12px;
-  color: #555;
-  text-align: center;
+  justify-content: center;
+  flex: 1;
+  color: var(--text-secondary);
 }
-.empty-icon-wrapper {
+
+.empty-icon {
   width: 80px;
   height: 80px;
-  background: rgba(244, 180, 0, 0.08);
+  background-color: var(--bg-card);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 40px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.empty-state h2 {
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
-.empty-icon { font-size: var(--icon-empty); color: #F4B400; }
-.empty-state p { font-size: 18px; font-weight: 600; color: #ccc; }
-.empty-state span { font-size: 14px; color: #777; max-width: 450px; line-height: 1.6; }
+
+/* FAB */
+.fab {
+  display: none;
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  color: var(--bg-primary);
+  border: none;
+  font-size: 24px;
+  box-shadow: 0 4px 12px rgba(244, 180, 0, 0.3);
+  cursor: pointer;
+  z-index: 99;
+}
+
+@media (max-width: 768px) {
+  .page-header .btn-primary {
+    display: none;
+  }
+  .fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .document-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .doc-status {
+    justify-content: flex-start;
+  }
+  .doc-actions {
+    justify-content: flex-start;
+    width: 100%;
+    border-top: 1px solid var(--border-color);
+    padding-top: 12px;
+  }
+}
 </style>

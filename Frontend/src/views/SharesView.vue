@@ -1,553 +1,519 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useTheme } from '@/composables/useTheme'
+import api from '../api'
+import StatusBadge from '../components/shared/StatusBadge.vue'
+import ShareModal from '../components/documents/ShareModal.vue'
 
-const { isDark, toggleTheme } = useTheme()
-
-// ─── État de chargement ───────────────────────────────────────────
-const isLoading = ref(true)
-
-// ─── Partages actifs ──────────────────────────────────────────────
 const shares = ref([])
+const documents = ref([]) // Pour le dropdown du journal
+const selectedDocForJournal = ref('')
+const journal = ref([])
+const isLoadingShares = ref(true)
+const isLoadingJournal = ref(false)
+const isShareModalOpen = ref(false)
 
-// ─── Journal d'accès ──────────────────────────────────────────────
-const activities = ref([])
-
-// ─── Helpers ──────────────────────────────────────────────────────
-const copyLink = async (link) => {
-  try {
-    await navigator.clipboard.writeText(link)
-    // TODO: remplacer par un toast/toaster
-    alert('Lien copié dans le presse-papiers')
-  } catch (err) {
-    console.error('Erreur copie :', err)
-  }
-}
-
-const revokeShare = async (id) => {
-  // TODO: appeler DELETE /api/shares/${id}
-  const share = shares.value.find((s) => s.id === id)
-  if (share) {
-    share.statut = 'Révoqué'
-  }
-}
-
-const activityIconClass = (type) => {
-  return type === 'download' ? 'ti-download' : 'ti-eye'
-}
-
-const badgeClassForShare = (statut) => {
-  if (statut === 'Actif') return 'badge-success'
-  if (statut === 'Expiré') return 'badge-warning'
-  return 'badge-danger'
-}
-
-const badgeClassForActivity = (action) => {
-  if (action === 'Téléchargement') return 'badge-info'
-  return 'badge-neutral'
-}
-
-// ─── Chargement des données ───────────────────────────────────────
 const fetchShares = async () => {
-  // TODO: remplacer par → const res = await fetch('/api/shares')
-  // shares.value = await res.json()
-}
-
-const fetchActivities = async () => {
-  // TODO: remplacer par → const res = await fetch('/api/shares/activity')
-  // activities.value = await res.json()
-}
-
-// ─── Déclenchement au montage ─────────────────────────────────────
-onMounted(async () => {
   try {
-    await Promise.all([fetchShares(), fetchActivities()])
-  } catch (error) {
-    console.error('Erreur chargement partages :', error)
+    isLoadingShares.value = true
+    // Note: l'endpoint /api/shares/ n'est pas explicitement dans la liste, 
+    // on suppose qu'il retourne la liste des partages actifs de l'utilisateur.
+    const { data } = await api.get('/api/shares/')
+    shares.value = data
+  } catch (err) {
+    console.error('Erreur lors de la récupération des partages', err)
   } finally {
-    isLoading.value = false
+    isLoadingShares.value = false
   }
+}
+
+const fetchDocuments = async () => {
+  try {
+    const { data } = await api.get('/api/documents/')
+    documents.value = data
+    if (data.length > 0) {
+      selectedDocForJournal.value = data[0].id_doc
+      fetchJournal()
+    }
+  } catch (err) {
+    console.error('Erreur lors de la récupération des documents pour le journal', err)
+  }
+}
+
+const fetchJournal = async () => {
+  if (!selectedDocForJournal.value) return
+  
+  try {
+    isLoadingJournal.value = true
+    const { data } = await api.get(`/api/shares/${selectedDocForJournal.value}/journal`)
+    journal.value = data
+  } catch (err) {
+    console.error('Erreur lors de la récupération du journal', err)
+  } finally {
+    isLoadingJournal.value = false
+  }
+}
+
+onMounted(() => {
+  fetchShares()
+  fetchDocuments()
 })
+
+const revokeShare = async (id_part) => {
+  if (confirm('Êtes-vous sûr de vouloir révoquer ce partage ?')) {
+    try {
+      await api.patch(`/api/shares/${id_part}/revoquer`)
+      fetchShares()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+}
+
+const copySuccess = ref(null) // id du partage dont le lien vient d'être copié
+
+const copyLink = async (token, id_part) => {
+  // Pointe vers le téléchargement direct sur le BACKEND
+  const url = `http://127.0.0.1:8000/api/shares/telecharger/${token}`
+  try {
+    await navigator.clipboard.writeText(url)
+    copySuccess.value = id_part
+    setTimeout(() => copySuccess.value = null, 2000)
+  } catch (err) {
+    console.error('Erreur copie:', err)
+  }
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'Jamais'
+  return new Intl.DateTimeFormat('fr-FR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(new Date(dateString))
+}
+
+const getJournalIcon = (type) => {
+  return type === 'Téléchargement' ? 'ti-download text-primary' : 'ti-eye text-info'
+}
 </script>
 
 <template>
-  <div class="shares">
-    <!-- EN-TÊTE -->
-    <div class="header">
-      <div class="header-left">
-        <h1>Partages & Journal d'accès</h1>
-        <p class="subtitle">Contrôlez vos liens et suivez l'activité</p>
-      </div>
-      <div class="header-right">
-        <button class="btn-new">
-          <i class="ti ti-plus"></i> Nouveau partage
-        </button>
-        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
-          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
-        </button>
-        <button class="btn-icon" title="Paramètres" @click="$router.push('/settings')">
-          <i class="ti ti-settings"></i>
-        </button>
-      </div>
+  <div class="shares-view">
+    <div class="page-header">
+      <h1>Mes partages</h1>
+      <button class="btn-primary" @click="isShareModalOpen = true">
+        <i class="ti ti-share"></i> Nouveau partage
+      </button>
     </div>
 
-    <!-- SKELETON -->
-    <div v-if="isLoading" class="loading-state">
-      <div class="skeleton skeleton-header"></div>
-      <div class="skeleton-grid">
-        <div class="skeleton skeleton-column"></div>
-        <div class="skeleton skeleton-column"></div>
-      </div>
-    </div>
-
-    <!-- CONTENU -->
-    <div v-else class="shares-layout">
-      <!-- COLONNE GAUCHE : LIENS DE PARTAGE -->
+    <div class="shares-layout">
+      <!-- Colonne Gauche : Liste des partages -->
       <div class="shares-column">
-        <h2 class="section-title">Liens de partage actifs</h2>
-
-        <div v-if="shares.length === 0" class="empty-state">
-          <i class="ti ti-link-off empty-icon"></i>
-          <p>Aucun lien actif</p>
-          <span>Partagez un document pour générer un lien sécurisé.</span>
+        <h2>Partages actifs</h2>
+        
+        <div v-if="isLoadingShares" class="skeleton-list">
+          <div class="skeleton-item" v-for="i in 3" :key="i"></div>
         </div>
 
-        <div
-          v-for="share in shares"
-          :key="share.id"
-          class="card share-card"
-        >
-          <div class="share-header">
-            <h3 class="share-doc">{{ share.document }}</h3>
-            <span :class="['badge', badgeClassForShare(share.statut)]">
-              {{ share.statut }}
-            </span>
-          </div>
+        <div v-else-if="shares.length === 0" class="empty-state">
+          <i class="ti ti-share-off"></i>
+          <p>Aucun partage actif</p>
+        </div>
 
-          <div class="share-link-box">
-            <span class="share-url">{{ share.lien }}</span>
-            <button class="btn-copy" @click="copyLink(share.lien)">
-              <i class="ti ti-copy"></i>
-            </button>
-          </div>
+        <div v-else class="shares-list">
+          <div class="share-card" v-for="share in shares" :key="share.id_part">
+            <div class="share-header">
+              <h3 class="doc-name"><i class="ti ti-file-text"></i> {{ share.document?.nom_doc || 'Document' }}</h3>
+              <StatusBadge :date_exp="share.date_expiration" />
+            </div>
+            
+            <div class="share-details">
+              <div class="detail-item">
+                <i class="ti ti-clock"></i> Expire le: {{ formatDate(share.date_expiration) }}
+              </div>
+              <div class="detail-item">
+                <i class="ti ti-download"></i> Téléchargements: {{ share.nb_telechargements }} / {{ share.max_telechargements || '∞' }}
+              </div>
+            </div>
 
-          <div class="share-footer">
-            <span class="share-expiry">Expire le {{ share.expiration }}</span>
-            <button
-              v-if="share.statut === 'Actif'"
-              class="btn-revoke"
-              @click="revokeShare(share.id)"
-            >
-              Révoquer
-            </button>
+            <div class="share-actions">
+              <div class="link-box">
+                <input type="text" readonly :value="`http://127.0.0.1:8000/api/shares/telecharger/${share.token}`">
+                <button 
+                  class="btn-icon" 
+                  :class="{ 'copied': copySuccess === share.id_part }"
+                  @click="copyLink(share.token, share.id_part)" 
+                  :title="copySuccess === share.id_part ? 'Copié !' : 'Copier le lien'"
+                >
+                  <i :class="copySuccess === share.id_part ? 'ti ti-check' : 'ti ti-copy'"></i>
+                </button>
+              </div>
+              <button class="btn-revoke" @click="revokeShare(share.id_part)">
+                <i class="ti ti-trash"></i> Révoquer
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- COLONNE DROITE : JOURNAL D'ACCÈS -->
-      <div class="card activity-column">
-        <h2 class="section-title">Activité récente</h2>
+      <!-- Colonne Droite : Journal d'accès -->
+      <div class="journal-column">
+        <h2>Journal d'accès</h2>
+        
+        <div class="journal-card">
+          <div class="journal-filter">
+            <label>Sélectionner un document :</label>
+            <select v-model="selectedDocForJournal" @change="fetchJournal">
+              <option v-for="doc in documents" :key="doc.id_doc" :value="doc.id_doc">
+                {{ doc.nom_doc }}
+              </option>
+            </select>
+          </div>
 
-        <div v-if="activities.length === 0" class="empty-state small">
-          <i class="ti ti-activity empty-icon"></i>
-          <p>Aucune activité récente</p>
-        </div>
+          <div v-if="isLoadingJournal" class="skeleton-list">
+            <div class="skeleton-item small" v-for="i in 4" :key="i"></div>
+          </div>
 
-        <div v-else class="activity-list">
-          <div
-            v-for="(act, idx) in activities"
-            :key="idx"
-            class="activity-row"
-          >
-            <div class="activity-icon">
-              <i :class="'ti ' + activityIconClass(act.type)"></i>
-            </div>
-            <div class="activity-info">
-              <p class="activity-ip">{{ act.ip }}</p>
-              <p class="activity-location">{{ act.pays }}</p>
-            </div>
-            <div class="activity-right">
-              <p class="activity-time">{{ act.horodatage }}</p>
-              <span :class="['badge', badgeClassForActivity(act.action)]">
-                {{ act.action }}
-              </span>
+          <div v-else-if="journal.length === 0" class="empty-state">
+            <i class="ti ti-history"></i>
+            <p>Aucun historique pour ce document</p>
+          </div>
+
+          <div v-else class="timeline">
+            <div class="timeline-item" v-for="(entry, index) in journal" :key="index">
+              <div class="timeline-icon">
+                <i :class="['ti', getJournalIcon(entry.type_action)]"></i>
+              </div>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="action-type">{{ entry.type_action }}</span>
+                  <span class="action-time">{{ formatDate(entry.horodatage) }}</span>
+                </div>
+                <div class="action-details">
+                  <span class="ip-address"><i class="ti ti-network"></i> IP: {{ entry.ip_masquee }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
+    
+    <ShareModal
+      v-if="isShareModalOpen"
+      @close="isShareModalOpen = false"
+      @share-created="fetchShares"
+    />
   </div>
 </template>
 
 <style scoped>
-.shares {
-  padding: 24px 32px;
-  background-color: var(--bg-primary);
-  min-height: 100vh;
-  color: var(--text-primary);
-  font-family: 'Inter', sans-serif;
-}
-
-/* EN-TÊTE */
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 28px;
-}
-
-.header h1 {
-  font-size: 22px;
-  font-weight: 500;
-}
-
-.subtitle {
-  font-size: 13px;
-  color: #888;
-  margin-top: 4px;
-}
-
-.header-right {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-
-.btn-new {
-  background: #F4B400;
-  color: #121212;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-new:hover {
-  background: #D89E00;
-}
-
-.btn-icon {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border: 0.5px solid var(--border-color);
-  border-radius: 8px;
-  padding: 10px;
-  cursor: pointer;
-  font-size: 16px;
-  transition: color 0.2s, border-color 0.2s;
-}
-.btn-icon:hover {
-  color: var(--primary);
-  border-color: var(--primary);
-}
-
-/* SKELETON */
-.loading-state {
+.shares-view {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-.skeleton {
-  background: linear-gradient(90deg, #1E1E1E 25%, #2a2a2a 50%, #1E1E1E 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
-  border-radius: 18px;
-}
-
-.skeleton-header {
-  height: 60px;
-}
-
-.skeleton-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.skeleton-column {
-  height: 500px;
-}
-
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-/* CARTES */
-.card {
-  background: #1E1E1E;
-  border-radius: 18px;
-  padding: 20px;
-  border: 0.5px solid #2a2a2a;
-}
-
-/* LAYOUT DEUX COLONNES */
-.shares-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 24px;
 }
 
-.section-title {
+.page-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: #121212;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
   font-size: 15px;
-  font-weight: 500;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+}
+
+.shares-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+@media (min-width: 992px) {
+  .shares-layout {
+    grid-template-columns: 3fr 2fr;
+  }
+}
+
+h2 {
+  font-size: 18px;
+  color: var(--text-primary);
   margin-bottom: 16px;
 }
 
-.shares-column {
+/* Shares List */
+.shares-list {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-/* CARTE DE PARTAGE */
 .share-card {
-  transition: border-color 0.15s ease;
-}
-
-.share-card:hover {
-  border-color: rgba(244, 180, 0, 0.3);
+  background-color: var(--bg-card);
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .share-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-  gap: 12px;
+  align-items: center;
 }
 
-.share-doc {
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.3;
-}
-
-.share-link-box {
+.doc-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 0.5px solid #2a2a2a;
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 14px;
+  margin: 0;
 }
 
-.share-url {
-  flex: 1;
+.doc-name i {
+  color: var(--primary);
+}
+
+.share-details {
+  display: flex;
+  gap: 24px;
+  color: var(--text-secondary);
   font-size: 13px;
-  color: #888;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.btn-copy {
-  background: transparent;
-  border: none;
-  color: #aaa;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px;
-  border-radius: 6px;
-}
-
-.btn-copy:hover {
-  color: #F4B400;
-  background: rgba(244, 180, 0, 0.1);
-}
-
-.share-footer {
+.detail-item {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-}
-
-.share-expiry {
-  font-size: 12px;
-  color: #888;
-}
-
-.btn-revoke {
-  background: rgba(239, 68, 68, 0.1);
-  color: #EF4444;
-  border: none;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.btn-revoke:hover {
-  background: rgba(239, 68, 68, 0.2);
-}
-
-/* COLONNE ACTIVITÉ */
-.activity-column {
-  align-self: flex-start;
-}
-
-.activity-list {
-  display: flex;
-  flex-direction: column;
   gap: 6px;
 }
 
-.activity-row {
+.share-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.link-box {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 12px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--input-border);
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-.activity-row:nth-child(odd) {
-  background: rgba(255, 255, 255, 0.03);
+.link-box input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  font-size: 13px;
+  outline: none;
 }
 
-.activity-icon {
-  width: 36px;
-  height: 36px;
+.btn-icon {
+  background: none;
+  border: none;
+  color: var(--primary);
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-icon:hover {
+  background-color: rgba(244, 180, 0, 0.1);
+}
+
+.btn-icon.copied {
+  color: var(--success);
+}
+
+.btn-revoke {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background-color 0.2s;
+}
+
+.btn-revoke:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+/* Journal */
+.journal-card {
+  background-color: var(--bg-card);
+  border-radius: 18px;
+  padding: 20px;
+  height: 100%;
+}
+
+.journal-filter {
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.journal-filter label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.journal-filter select {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--input-border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.journal-filter select:focus {
+  border-color: var(--primary);
+}
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 16px;
+  width: 2px;
+  background-color: var(--border-color);
+}
+
+.timeline-item {
+  display: flex;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.timeline-icon {
+  width: 34px;
+  height: 34px;
+  background-color: var(--bg-primary);
+  border: 2px solid var(--border-color);
   border-radius: 50%;
-  background: rgba(244, 180, 0, 0.1);
-  color: #F4B400;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 16px;
-  flex-shrink: 0;
 }
 
-.activity-info {
+.text-primary { color: var(--primary); }
+.text-info { color: #3B82F6; }
+
+.timeline-content {
   flex: 1;
-  min-width: 0;
+  background-color: var(--bg-primary);
+  padding: 12px 16px;
+  border-radius: 12px;
 }
 
-.activity-ip {
-  font-size: 13px;
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.action-type {
+  font-size: 14px;
   font-weight: 500;
-  color: white;
+  color: var(--text-primary);
 }
 
-.activity-location {
+.action-time {
   font-size: 12px;
-  color: #888;
-  margin-top: 2px;
+  color: var(--text-secondary);
 }
 
-.activity-right {
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.activity-time {
-  font-size: 11px;
-  color: #888;
-  margin-bottom: 4px;
-}
-
-/* BADGES */
-.badge {
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 20px;
-  display: inline-block;
-}
-
-.badge-success {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22C55E;
-}
-
-.badge-warning {
-  background: rgba(244, 180, 0, 0.15);
-  color: #F4B400;
-}
-
-.badge-danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #EF4444;
-}
-
-.badge-neutral {
-  background: rgba(255, 255, 255, 0.08);
+.action-details {
+  font-size: 13px;
   color: #aaa;
 }
 
-.badge-info {
-  background: rgba(59, 130, 246, 0.15);
-  color: #60A5FA;
+.ip-address {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-/* ÉTAT VIDE */
+/* Skeletons & Empty States */
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skeleton-item {
+  height: 120px;
+  background-color: var(--bg-card);
+  border-radius: 18px;
+  animation: pulse 1.5s infinite;
+}
+
+.skeleton-item.small {
+  height: 60px;
+  background-color: var(--bg-primary);
+  border-radius: 12px;
+}
+
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 48px 0;
-  gap: 8px;
-  color: #555;
-}
-
-.empty-state.small {
-  padding: 32px 0;
-}
-
-.empty-icon {
-  font-size: 36px;
-  margin-bottom: 4px;
-  color: #444;
-}
-
-.empty-state p {
-  font-size: 14px;
-  font-weight: 500;
-  color: #666;
-}
-
-.empty-state span {
-  font-size: 12px;
-  color: #444;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-secondary);
   text-align: center;
-  max-width: 300px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
 }
 
-/* RESPONSIVE */
-@media (max-width: 1024px) {
-  .shares-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .skeleton-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .shares {
-    padding: 20px;
-  }
-
-  .activity-row {
-    flex-wrap: wrap;
-  }
-
-  .activity-right {
-    width: 100%;
-    text-align: left;
-    margin-top: 8px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
+.empty-state i {
+  font-size: 48px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
 }
 </style>

@@ -1,50 +1,43 @@
-/* Les @import DOIVENT être en tout premier dans un fichier CSS,
-   sinon le navigateur les ignore silencieusement.
-   C'est ce qui empêchait la police Inter et les icônes Tabler
-   de se charger correctement dans toute l'application. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-@import '@tabler/icons-webfont/dist/tabler-icons.min.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ============================================
-   THÈME — variables centralisées
-   Une seule source de vérité pour toute l'app.
-   Le thème actif est piloté par l'attribut
-   data-theme="dark" | "light" posé sur <html>
-   (voir src/composables/useTheme.js)
-   ============================================ */
-:root,
-[data-theme='dark'] {
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* Thème sombre — défaut */
+:root {
   --bg-primary: #121212;
   --bg-secondary: #1E1E1E;
-  --bg-hover: #262626;
+  --bg-card: #1E1E1E;
+  --border-color: #2a2a2a;
   --text-primary: #FFFFFF;
   --text-secondary: #888888;
-  --border-color: #2A2A2A;
-
+  --text-muted: #555555;
   --primary: #F4B400;
   --primary-hover: #D89E00;
   --success: #22C55E;
-  --warning: #F4B400;
   --danger: #EF4444;
+  --sidebar-bg: #121212;
+  --input-bg: #121212;
+  --input-border: #333333;
 }
 
-[data-theme='light'] {
+/* Thème clair */
+:root.light-mode {
   --bg-primary: #F5F5F5;
   --bg-secondary: #FFFFFF;
-  --bg-hover: #EDEDED;
-  --text-primary: #2C2C2C;
-  --text-secondary: #6B6B6B;
+  --bg-card: #FFFFFF;
   --border-color: #E0E0E0;
-
+  --text-primary: #2C2C2C;
+  --text-secondary: #666666;
+  --text-muted: #999999;
   --primary: #F4B400;
   --primary-hover: #D89E00;
   --success: #22C55E;
-  --warning: #F4B400;
   --danger: #EF4444;
+  --sidebar-bg: #1a1a1a;
+  --input-bg: #F7F7F7;
+  --input-border: #DDDDDD;
 }
 
 * {
@@ -54,9 +47,33 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter', sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   font-size: 16px;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Transition fluide sur tous les éléments au changement de thème */
+*, *::before, *::after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Forcer les inputs et select en thème clair */
+:root.light-mode input,
+:root.light-mode select,
+:root.light-mode textarea {
+  background-color: var(--input-bg) !important;
+  border-color: var(--input-border) !important;
+  color: var(--text-primary) !important;
+}
+
+:root.light-mode input::placeholder,
+:root.light-mode textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Forcer les scrollbars en mode clair */
+:root.light-mode {
+  color-scheme: light;
 }

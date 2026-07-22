@@ -1,49 +1,37 @@
 <script setup>
-import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '../../stores/auth'
 
 const router = useRouter()
 const route = useRoute()
-
-// Récupérer le nom de l'utilisateur connecté depuis le localStorage.
-// Reste vide tant qu'aucune donnée réelle n'est disponible (pas de valeur
-// factice) : la vraie valeur viendra de la base de données / du backend.
-const user = JSON.parse(localStorage.getItem('user') || '{}')
-const userName = ref(user.name || '')
-
-// TODO backend : remplacer par le compteur réel de notifications non lues
-const unreadNotifications = ref(0)
+const authStore = useAuthStore()
 
 const navItems = [
   { label: 'Accueil', icon: 'ti-home', route: '/' },
   { label: 'Mes documents', icon: 'ti-files', route: '/documents' },
   { label: 'Dépôts partagés', icon: 'ti-users', route: '/depots' },
-  { label: 'Partages', icon: 'ti-share', route: '/shares' }
-]
-
-const secondaryItems = [
-  { label: 'Hors ligne', icon: 'ti-wifi-off', route: '/hors-ligne' },
-  { label: 'Notifications', icon: 'ti-bell', route: '/notifications' }
+  { label: 'Partages', icon: 'ti-share', route: '/shares' },
+  { label: 'Hors ligne', icon: 'ti-wifi-off', route: '/offline' }
 ]
 
 const isActive = (itemRoute) => route.path === itemRoute
 const navigate = (itemRoute) => router.push(itemRoute)
 
-const logout = () => {
-  localStorage.removeItem('user')
+const handleLogout = () => {
+  authStore.logout()
   router.push('/login')
-  window.location.reload()
 }
 </script>
 
 <template>
   <aside class="sidebar">
+
     <!-- LOGO -->
     <div class="logo">
       <div class="logo-icon">
         <i class="ti ti-lock"></i>
       </div>
-      <span class="logo-name">CoffreDoc</span>
+      <span class="logo-name">FileSafe</span>
     </div>
 
     <!-- NAVIGATION PRINCIPALE -->
@@ -62,37 +50,21 @@ const logout = () => {
     <!-- SÉPARATEUR -->
     <div class="separator"></div>
 
-    <!-- NAVIGATION SECONDAIRE -->
-    <nav class="nav-secondary">
-      <div
-        v-for="item in secondaryItems"
-        :key="item.route"
-        :class="['nav-item', isActive(item.route) ? 'active' : '']"
-        @click="navigate(item.route)"
-      >
-        <i :class="['ti', item.icon]"></i>
-        <span>{{ item.label }}</span>
-        <span v-if="item.route === '/notifications' && unreadNotifications > 0" class="nav-badge">
-          {{ unreadNotifications }}
-        </span>
-      </div>
-    </nav>
-
+    
+    
     <!-- BAS DE SIDEBAR -->
     <div class="sidebar-bottom">
-      <div
-        :class="['nav-item', isActive('/settings') ? 'active' : '']"
-        @click="navigate('/settings')"
-      >
+      <div class="nav-item" @click="navigate('/settings')">
         <i class="ti ti-settings"></i>
         <span>Paramètres</span>
       </div>
       <div class="user-row">
-        <div class="avatar">{{ userName ? userName.charAt(0).toUpperCase() : '' }}</div>
-        <span class="user-name">{{ userName }}</span>
-        <i class="ti ti-logout logout-icon" title="Déconnexion" @click="logout"></i>
+        <div class="avatar">{{ authStore.user?.prenom?.[0]?.toUpperCase() || 'U' }}</div>
+        <span class="user-name">{{ authStore.user?.nom || 'Utilisateur' }}</span>
+        <i class="ti ti-logout logout-icon" @click="handleLogout" title="Se déconnecter"></i>
       </div>
     </div>
+
   </aside>
 </template>
 
@@ -101,18 +73,19 @@ const logout = () => {
    TAILLES — modifie uniquement ici
    ============================================ */
 .sidebar {
-  --font-logo:    22px;
-  --font-nav:     20px;
-  --font-user:    20px;
-  --icon-nav:     20px;
-  --icon-logo:    20px;
+  --font-logo:    22px;   /* Nom "Filsafe"         */
+  --font-nav:     18px;   /* Items de navigation     */
+  --font-badge:   18px;   /* Badge "3"               */
+  --font-user:    20px;   /* Nom utilisateur bas      */
+  --icon-nav:     20px;   /* Taille icônes navigation */
+  --icon-logo:    20px;   /* Taille icône logo        */
 }
 /* ============================================ */
 
 .sidebar {
   width: 220px;
   min-height: 100vh;
-  background-color: var(--bg-secondary);
+  background-color: var(--bg-primary);
   border-right: 0.5px solid var(--border-color);
   display: flex;
   flex-direction: column;
@@ -135,7 +108,7 @@ const logout = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #121212;
+  color: var(--bg-primary);
   font-size: var(--icon-logo);
 }
 .logo-name {
@@ -145,13 +118,11 @@ const logout = () => {
 }
 
 /* NAVIGATION */
-.nav-main,
-.nav-secondary {
+.nav-main {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
 .nav-item {
   display: flex;
   align-items: center;
@@ -165,7 +136,7 @@ const logout = () => {
   position: relative;
 }
 .nav-item:hover {
-  background: var(--bg-hover);
+  background: var(--bg-card);
   color: var(--text-primary);
 }
 .nav-item.active {
@@ -178,19 +149,15 @@ const logout = () => {
   flex-shrink: 0;
 }
 
-.nav-badge {
+/* BADGE */
+.badge {
   margin-left: auto;
   background: var(--primary);
-  color: #121212;
-  font-size: 11px;
-  font-weight: 600;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--bg-primary);
+  font-size: var(--font-badge);
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 20px;
 }
 
 /* SÉPARATEUR */
@@ -198,6 +165,13 @@ const logout = () => {
   height: 0.5px;
   background: var(--border-color);
   margin: 16px 0;
+}
+
+/* NAVIGATION SECONDAIRE */
+.nav-secondary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* BAS DE SIDEBAR */
@@ -220,7 +194,7 @@ const logout = () => {
   width: 28px;
   height: 28px;
   background: var(--primary);
-  color: #121212;
+  color: var(--bg-primary);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -231,18 +205,15 @@ const logout = () => {
 }
 .user-name {
   font-size: var(--font-user);
-  color: var(--text-secondary);
+  color: #aaa;
   flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .logout-icon {
   font-size: 16px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   cursor: pointer;
 }
 .logout-icon:hover {
-  color: #EF4444;
+  color: var(--danger);
 }
 </style>
