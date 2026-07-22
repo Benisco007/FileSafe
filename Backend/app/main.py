@@ -25,6 +25,8 @@ app.include_router(documents.router, prefix="/api/documents", tags=["Documents"]
 app.include_router(shares.router, prefix="/api/shares", tags=["Partages"])
 app.include_router(depots.router, prefix="/api/depots", tags=["Dépôts"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Administration"])
+from app.routers import notifications
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 
 @app.get("/")
 def read_root():

@@ -10,14 +10,18 @@ from app.models.user import User
 from app.models.document import Document
 from app.models.share import Share
 from app.models.journal_acces import JournalAcces
+from app.models.notification import Notification
+from app.services.email import send_share_email
+import asyncio
 
 router = APIRouter()
 
 
 # ── CRÉER UN LIEN DE PARTAGE ─────────────────────────────────────────────────
 @router.post("/{id_doc}/partager", status_code=201)
-def partager_document(
+async def partager_document(
     id_doc: str,
+    email_destinataire: Optional[str] = None,
     duree_heures: Optional[int] = 24,
     max_telechargements: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -45,9 +49,29 @@ def partager_document(
     db.commit()
     db.refresh(partage)
 
+    lien_frontend = f"http://localhost:5173/share/{token}"
+
+    if email_destinataire:
+        destinataire_user = db.query(User).filter(User.mail == email_destinataire).first()
+        if destinataire_user:
+            nouvelle_notif = Notification(
+                id_user=destinataire_user.id_user,
+                titre="Nouvel accès",
+                description=f"{current_user.prenom} {current_user.nom} a partagé le document '{doc.nom_doc}' avec vous.",
+                type_notif="Accès extérieurs"
+            )
+            db.add(nouvelle_notif)
+            db.commit()
+        
+        nom_expediteur = f"{current_user.prenom} {current_user.nom}"
+        try:
+            await send_share_email(email_destinataire, lien_frontend, nom_expediteur, doc.nom_doc)
+        except Exception as e:
+            print(f"Erreur envoi email: {e}")
+
     return {
         "message": "Lien de partage créé.",
-        "lien": f"http://localhost:8000/api/shares/acces/{token}",
+        "lien": lien_frontend,
         "expire_le": partage.date_exp,
         "max_telechargements": partage.max_telechargements
     }
@@ -74,9 +98,6 @@ def acceder_document(
     if partage.max_telechargements and partage.nb_telechargements >= partage.max_telechargements:
         raise HTTPException(status_code=403, detail="Limite de téléchargements atteinte.")
 
-    partage.nb_telechargements += 1
-    db.commit()
-
     journal = JournalAcces(
         id_part=partage.id_part,
         type_action="consultation",
@@ -87,11 +108,15 @@ def acceder_document(
     db.commit()
 
     doc = partage.document
+    expediteur = doc.user
+    
     return {
         "nom_doc": doc.nom_doc,
         "type_doc": doc.type_doc,
         "categorie": doc.categorie,
         "date_ajout": doc.date_ajout,
+        "expediteur_nom": f"{expediteur.prenom} {expediteur.nom}" if expediteur else "Utilisateur inconnu",
+        "expediteur_email": expediteur.mail if expediteur else "",
         "lien_telechargement": f"http://localhost:8000/api/shares/telecharger/{token}"
     }
 
@@ -101,6 +126,7 @@ def acceder_document(
 def telecharger_via_lien(
     token: str,
     request: Request,
+    inline: Optional[bool] = False,
     db: Session = Depends(get_db)
 ):
     from fastapi.responses import FileResponse
@@ -114,9 +140,15 @@ def telecharger_via_lien(
     if partage.date_exp and datetime.utcnow() > partage.date_exp:
         raise HTTPException(status_code=403, detail="Lien expiré.")
 
+    if partage.max_telechargements and partage.nb_telechargements >= partage.max_telechargements:
+        raise HTTPException(status_code=403, detail="Limite de téléchargements atteinte.")
+
+    if not inline:
+        partage.nb_telechargements += 1
+
     journal = JournalAcces(
         id_part=partage.id_part,
-        type_action="telechargement",
+        type_action="consultation" if inline else "telechargement",
         adresse_ip=request.client.host,
         nav_user=request.headers.get("user-agent", "")
     )

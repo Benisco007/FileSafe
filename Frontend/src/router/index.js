@@ -6,6 +6,7 @@ import LoginView from '../views/Auth/LoginView.vue'
 import RegisterView from '../views/Auth/RegisterView.vue'
 import TwoFAView from '../views/Auth/TwoFAView.vue'
 import TwoFALoginView from '../views/Auth/TwoFALoginView.vue'
+import ShareAccessView from '../views/ShareAccessView.vue'
 import DocumentsView from '../views/DocumentsView.vue'
 import SharesView from '../views/SharesView.vue'
 import DepotsView from '../views/DepotsView.vue'
@@ -17,6 +18,9 @@ import OfflineView from '../views/OfflineView.vue'
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
+    // Public Share Access (No Auth)
+    { path: '/share/:token', name: 'share-access', component: ShareAccessView },
+
     // Auth
     { path: '/login', name: 'login', component: LoginView },
     { path: '/register', name: 'register', component: RegisterView },

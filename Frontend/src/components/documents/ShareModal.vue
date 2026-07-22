@@ -67,16 +67,13 @@ const handleGenerateLink = async () => {
     isGenerating.value = true
     let url = `/api/shares/${docId}/partager?duree_heures=${dureeHeures}`
     if (maxTelechargements) url += `&max_telechargements=${maxTelechargements}`
+    if (destinataire.value) url += `&email_destinataire=${encodeURIComponent(destinataire.value.trim())}`
 
     const { data } = await api.post(url, {})
 
-    // Le backend retourne directement le champ "lien" avec l'URL complète
-    // Ex: { message, lien: "http://localhost:8000/api/shares/acces/{token}", expire_le, max_telechargements }
     if (data.lien) {
-      // URL d'accès (métadonnées) → on en déduit l'URL de téléchargement
-      generatedLink.value = data.lien  // http://localhost:8000/api/shares/acces/{token}
-      // Construire l'URL de téléchargement direct depuis la même base
-      downloadLink.value = data.lien.replace('/acces/', '/telecharger/')
+      generatedLink.value = data.lien  // http://localhost:5173/share/{token}
+      downloadLink.value = data.lien   // C'est ce lien qu'on copie pour l'accès
     } else {
       errorMsg.value = `Erreur: champ "lien" absent. Reçu: ${JSON.stringify(data)}`
       return
@@ -190,7 +187,7 @@ const formatDate = (dateString) => {
         </div>
         
         <div class="modal-body text-center">
-          <label class="link-label">Lien de téléchargement direct</label>
+          <label class="link-label">Lien d'accès au document</label>
           <div class="link-box">
             <input type="text" readonly :value="downloadLink">
             <button class="btn-copy" @click="copyLink" :class="{ 'copied': copySuccess }">

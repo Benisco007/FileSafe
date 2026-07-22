@@ -31,3 +31,22 @@ async def send_2fa_email(mail: str, code: str):
     )
     fm = FastMail(conf)
     await fm.send_message(message)
+
+async def send_share_email(mail: str, lien_partage: str, nom_expediteur: str, nom_document: str):
+    message = MessageSchema(
+        subject=f"{nom_expediteur} a partagé un document avec vous",
+        recipients=[mail],
+        body=f"""
+        Bonjour,
+
+        {nom_expediteur} vient de partager le document "{nom_document}" avec vous via FileSafe.
+        
+        Vous pouvez y accéder en cliquant sur le lien ci-dessous :
+        {lien_partage}
+
+        L'équipe FileSafe
+        """,
+        subtype="plain"
+    )
+    fm = FastMail(conf)
+    await fm.send_message(message)

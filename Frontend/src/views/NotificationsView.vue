@@ -11,19 +11,8 @@ const filters = ['Toutes', 'Alertes expiration', 'Accès extérieurs']
 const fetchNotifications = async () => {
   try {
     isLoading.value = true
-    // On utilise /api/dashboard/stats pour récupérer les alertes comme demandé
-    const { data } = await api.get('/api/dashboard/stats')
-    // Mapper les alertes en format de notification
-    if (data.alertes) {
-      notifications.value = data.alertes.map((alerte, index) => ({
-        id: index,
-        titre: getTitreAlerte(alerte.message),
-        description: alerte.message,
-        type: getTypeAlerte(alerte.message),
-        lue: false, // Simulé, puisqu'il n'y a pas d'état lu/non lu dans l'API fournie
-        horodatage: new Date().toISOString() // Simulé pour l'affichage
-      }))
-    }
+    const { data } = await api.get('/api/notifications/')
+    notifications.value = data
   } catch (err) {
     console.error('Erreur lors de la récupération des notifications', err)
   } finally {
@@ -54,7 +43,19 @@ const getIcon = (type) => {
 }
 
 const formatRelativeTime = (dateString) => {
-  return "Il y a quelques instants" // Simplification pour le mock
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = now - date
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffMins < 1) return 'À l\'instant'
+  if (diffMins < 60) return `Il y a ${diffMins} min`
+  if (diffHours < 24) return `Il y a ${diffHours}h`
+  if (diffDays === 1) return 'Hier'
+  return `Il y a ${diffDays} jours`
 }
 
 const filteredNotifications = computed(() => {
@@ -62,8 +63,13 @@ const filteredNotifications = computed(() => {
   return notifications.value.filter(n => n.type === activeFilter.value)
 })
 
-const markAllAsRead = () => {
-  notifications.value.forEach(n => n.lue = true)
+const markAllAsRead = async () => {
+  try {
+    await api.patch('/api/notifications/marquer-lues')
+    notifications.value.forEach(n => n.lue = true)
+  } catch (err) {
+    console.error('Erreur lors du marquage des notifications', err)
+  }
 }
 </script>
 

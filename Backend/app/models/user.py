@@ -24,3 +24,5 @@ class User(Base):
     depots_membres = relationship("MembreDepot", back_populates="user")
     derniere_connexion = Column(DateTime, nullable=True)
     deux_fa_active = Column(Boolean, default=False)
+    
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
