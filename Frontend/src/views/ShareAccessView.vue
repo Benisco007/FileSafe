@@ -1,8 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '../api'
+import axios from 'axios'
 import PreviewModal from '../components/documents/PreviewModal.vue'
+
+// Instance axios sans token JWT — accès public
+const publicApi = axios.create({
+  baseURL: 'http://localhost:8000',
+})
 
 const route = useRoute()
 const token = route.params.token
@@ -21,15 +26,19 @@ const isLoadingPreview = ref(false)
 const fetchShareData = async () => {
   try {
     isLoading.value = true
-    const { data } = await api.get(`/api/shares/acces/${token}`)
+    console.log('[ShareAccess] token lu depuis URL:', token)
+    const { data } = await publicApi.get(`/api/shares/acces/${token}`)
+    console.log('[ShareAccess] réponse backend:', data)
     documentData.value = data
   } catch (err) {
     if (err.response?.status === 404) {
       errorMsg.value = "Ce lien de partage n'existe pas ou est invalide."
     } else if (err.response?.status === 403) {
       errorMsg.value = err.response.data.detail || "Vous n'avez pas accès à ce document."
+    } else if (!err.response) {
+      errorMsg.value = "Impossible de contacter le serveur. Vérifiez que le backend est bien démarré."
     } else {
-      errorMsg.value = "Une erreur est survenue lors de la récupération du document."
+      errorMsg.value = ""
     }
   } finally {
     isLoading.value = false
@@ -43,27 +52,22 @@ onMounted(() => {
 const handleDownload = async () => {
   if (!documentData.value?.lien_telechargement) return
   try {
-    const { data, headers } = await api.get(`/api/shares/telecharger/${token}`, { responseType: 'blob' })
-
-    // Récupérer le vrai type MIME depuis les headers pour que le fichier soit reconnu à l'ouverture
-    const mimeType = headers['content-type'] || documentData.value.type_doc || 'application/octet-stream'
-    const url = window.URL.createObjectURL(new Blob([data], { type: mimeType }))
-
+    const { data, headers } = await publicApi.get(`/api/shares/telecharger/${token}`, { responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([data]))
     const link = document.createElement('a')
     link.href = url
-
+    
     let fileName = documentData.value.nom_doc || 'document'
     const contentDisposition = headers['content-disposition']
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
-      if (match && match[1]) fileName = decodeURIComponent(match[1])
+      const match = contentDisposition.match(/filename="(.+)"/)
+      if (match && match[1]) fileName = match[1]
     }
-
+    
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Erreur lors du téléchargement:', err)
     alert("Impossible de télécharger ce document.")
@@ -75,12 +79,11 @@ const handlePreview = async () => {
   
   try {
     isLoadingPreview.value = true
-    const { data, headers } = await api.get(`/api/shares/telecharger/${token}?inline=true`, {
+    const { data, headers } = await publicApi.get(`/api/shares/telecharger/${token}?inline=true`, {
       responseType: 'blob'
     })
     
-    // Priorité aux headers du serveur (source de vérité), puis fallback sur les métadonnées du doc
-    const type = headers['content-type'] || documentData.value.type_doc || 'application/octet-stream'
+    const type = documentData.value.type_doc || headers['content-type'] || 'application/pdf'
     const blob = new Blob([data], { type })
     
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)

@@ -12,6 +12,8 @@ from app.models.share import Share
 from app.models.journal_acces import JournalAcces
 from app.models.notification import Notification
 from app.services.email import send_share_email
+from fastapi.responses import JSONResponse
+from fastapi import Response
 import asyncio
 
 router = APIRouter()
@@ -77,13 +79,45 @@ async def partager_document(
     }
 
 
+# ── LISTE DES PARTAGES DE L'UTILISATEUR ──────────────────────────────────────
+@router.get("/mes-partages", status_code=200)
+def mes_partages(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    docs = db.query(Document).filter(Document.id_user == current_user.id_user).all()
+    result = []
+    for doc in docs:
+        for partage in doc.partages:
+            if partage.est_actif:
+                result.append({
+                    "id_part": str(partage.id_part),
+                    "token": partage.token,
+                    "date_expiration": partage.date_exp,
+                    "max_telechargements": partage.max_telechargements,
+                    "nb_telechargements": partage.nb_telechargements,
+                    "est_actif": partage.est_actif,
+                    "date_creation": partage.date_creation,
+                    "document": {
+                        "id_doc": str(doc.id_doc),
+                        "nom_doc": doc.nom_doc,
+                        "type_doc": doc.type_doc,
+                        "categorie": doc.categorie,
+                    }
+                })
+    result.sort(key=lambda x: x["date_creation"], reverse=True)
+    return result
+
+
 # ── ACCÉDER VIA LIEN ─────────────────────────────────────────────────────────
 @router.get("/acces/{token}", status_code=200)
 def acceder_document(
     token: str,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
+    response.headers["Access-Control-Allow-Origin"] = "*"
     partage = db.query(Share).filter(Share.token == token).first()
 
     if not partage:
@@ -129,6 +163,7 @@ def telecharger_via_lien(
     inline: Optional[bool] = False,
     db: Session = Depends(get_db)
 ):
+    response.headers["Access-Control-Allow-Origin"] = "*"
     from fastapi.responses import FileResponse
     import os
 
@@ -155,19 +190,15 @@ def telecharger_via_lien(
     )
     db.add(journal)
     db.commit()
-    db.refresh(partage)
 
     doc = partage.document
     if not os.path.exists(doc.chemin_fichier):
         raise HTTPException(status_code=404, detail="Fichier introuvable.")
 
-    disposition = "inline" if inline else "attachment"
-
     return FileResponse(
         path=doc.chemin_fichier,
         filename=doc.nom_doc,
-        media_type=doc.type_doc,
-        content_disposition_type=disposition
+        media_type=doc.type_doc
     )
 
 

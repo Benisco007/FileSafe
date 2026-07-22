@@ -17,7 +17,7 @@ const fetchShares = async () => {
     isLoadingShares.value = true
     // Note: l'endpoint /api/shares/ n'est pas explicitement dans la liste, 
     // on suppose qu'il retourne la liste des partages actifs de l'utilisateur.
-    const { data } = await api.get('/api/shares/')
+    const { data } = await api.get('/api/shares/mes-partages')
     shares.value = data
   } catch (err) {
     console.error('Erreur lors de la récupération des partages', err)
@@ -73,7 +73,7 @@ const copySuccess = ref(null) // id du partage dont le lien vient d'être copié
 
 const copyLink = async (token, id_part) => {
   // Pointe vers le téléchargement direct sur le BACKEND
-  const url = `http://127.0.0.1:8000/api/shares/telecharger/${token}`
+  const url = `http://localhost:5173/share/${token}`
   try {
     await navigator.clipboard.writeText(url)
     copySuccess.value = id_part
@@ -140,7 +140,7 @@ const getJournalIcon = (type) => {
 
             <div class="share-actions">
               <div class="link-box">
-                <input type="text" readonly :value="`http://127.0.0.1:8000/api/shares/telecharger/${share.token}`">
+                <input type="text" readonly :value="`http://localhost:5173/share/${share.token}`">
                 <button 
                   class="btn-icon" 
                   :class="{ 'copied': copySuccess === share.id_part }"

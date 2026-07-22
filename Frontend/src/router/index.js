@@ -44,11 +44,15 @@ const router = createRouter({
 
 router.beforeEach((to, from) => {
   const authStore = useAuthStore()
-  
+
+  // Routes publiques : pas de vérification d'auth
+  const publicRoutes = ['share-access', 'login', 'register', '2fa', '2fa-login']
+  if (publicRoutes.includes(to.name)) return
+
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return '/login'
   }
-  
+
   if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {
     return '/'
   }
