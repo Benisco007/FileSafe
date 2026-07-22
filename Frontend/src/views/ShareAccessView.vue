@@ -44,21 +44,26 @@ const handleDownload = async () => {
   if (!documentData.value?.lien_telechargement) return
   try {
     const { data, headers } = await api.get(`/api/shares/telecharger/${token}`, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([data]))
+
+    // Récupérer le vrai type MIME depuis les headers pour que le fichier soit reconnu à l'ouverture
+    const mimeType = headers['content-type'] || documentData.value.type_doc || 'application/octet-stream'
+    const url = window.URL.createObjectURL(new Blob([data], { type: mimeType }))
+
     const link = document.createElement('a')
     link.href = url
-    
+
     let fileName = documentData.value.nom_doc || 'document'
     const contentDisposition = headers['content-disposition']
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename="(.+)"/)
-      if (match && match[1]) fileName = match[1]
+      const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
+      if (match && match[1]) fileName = decodeURIComponent(match[1])
     }
-    
+
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Erreur lors du téléchargement:', err)
     alert("Impossible de télécharger ce document.")
@@ -74,7 +79,8 @@ const handlePreview = async () => {
       responseType: 'blob'
     })
     
-    const type = documentData.value.type_doc || headers['content-type'] || 'application/pdf'
+    // Priorité aux headers du serveur (source de vérité), puis fallback sur les métadonnées du doc
+    const type = headers['content-type'] || documentData.value.type_doc || 'application/octet-stream'
     const blob = new Blob([data], { type })
     
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)

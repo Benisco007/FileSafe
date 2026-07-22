@@ -144,7 +144,8 @@ def telecharger_via_lien(
         raise HTTPException(status_code=403, detail="Limite de téléchargements atteinte.")
 
     if not inline:
-        partage.nb_telechargements += 1
+        partage.nb_telechargements = (partage.nb_telechargements or 0) + 1
+        db.add(partage)
 
     journal = JournalAcces(
         id_part=partage.id_part,
@@ -154,15 +155,19 @@ def telecharger_via_lien(
     )
     db.add(journal)
     db.commit()
+    db.refresh(partage)
 
     doc = partage.document
     if not os.path.exists(doc.chemin_fichier):
         raise HTTPException(status_code=404, detail="Fichier introuvable.")
 
+    disposition = "inline" if inline else "attachment"
+
     return FileResponse(
         path=doc.chemin_fichier,
         filename=doc.nom_doc,
-        media_type=doc.type_doc
+        media_type=doc.type_doc,
+        content_disposition_type=disposition
     )
 
 
