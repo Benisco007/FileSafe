@@ -6,7 +6,7 @@ class DocumentRecent(BaseModel):
     id_doc: str 
     nom_doc: str 
     type_doc: str
-    taille_doc: str 
+    taille_doc: float 
     date_ajout: datetime
     date_exp: Optional[datetime] 
     categorie: str

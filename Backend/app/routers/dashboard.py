@@ -43,7 +43,19 @@ async def get_dashboard_stats(
     documents_recents_obj = documents[:5]
 
    
-    documents_recents = [DocumentRecent.from_orm(doc) for doc in documents_recents_obj]
+    documents_recents = [
+        DocumentRecent(
+            id_doc=str(doc.id_doc),
+            nom_doc=doc.nom_doc,
+            type_doc=doc.type_doc,
+            taille_doc=float(doc.taille_doc),
+            date_ajout=doc.date_ajout,
+            date_exp=doc.date_exp,
+            categorie=doc.categorie or "",
+            status=doc.status or "Valide"
+        )
+        for doc in documents_recents_obj
+    ]
 
     return DashboardResponse(
         prenom=current_user.prenom,

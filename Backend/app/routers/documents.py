@@ -153,6 +153,7 @@ def consulter_document(
 @router.get("/{id_doc}/telecharger", status_code=200)
 def telecharger_document(
     id_doc: str,
+    inline: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -167,10 +168,13 @@ def telecharger_document(
     if not os.path.exists(doc.chemin_fichier):
         raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur.")
 
+    disp = "inline" if inline else "attachment"
+
     return FileResponse(
         path=doc.chemin_fichier,
         filename=doc.nom_doc,
-        media_type=doc.type_doc
+        media_type=doc.type_doc,
+        content_disposition_type=disp
     )
 
 
@@ -205,6 +209,25 @@ def marquer_critique(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    # D'abord récupérer le document
+    doc = db.query(Document).filter(
+        Document.id_doc == id_doc,
+        Document.id_user == current_user.id_user
+    ).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé.")
+
+    # Si le document est déjà critique → on le démarque sans vérifier le compteur
+    if doc.est_critique:
+        doc.est_critique = False
+        db.commit()
+        return {
+            "message": "Document démarqué comme critique.",
+            "est_critique": False
+        }
+
+    # Seulement si on veut MARQUER → vérifier la limite de 3
     docs_critiques = db.query(Document).filter(
         Document.id_user == current_user.id_user,
         Document.est_critique == True
@@ -216,22 +239,13 @@ def marquer_critique(
             detail="Maximum 3 documents critiques autorisés."
         )
 
-    doc = db.query(Document).filter(
-        Document.id_doc == id_doc,
-        Document.id_user == current_user.id_user
-    ).first()
-
-    if not doc:
-        raise HTTPException(status_code=404, detail="Document non trouvé.")
-
-    doc.est_critique = not doc.est_critique
+    doc.est_critique = True
     db.commit()
 
     return {
-        "message": f"Document {'marqué' if doc.est_critique else 'démarqué'} comme critique.",
-        "est_critique": doc.est_critique
+        "message": "Document marqué comme critique.",
+        "est_critique": True
     }
-
 
 # ── AUTORISER / REFUSER ANALYSE IA ──────────────────────────────────────────
 @router.patch("/{id_doc}/autoriser-ia", status_code=200)

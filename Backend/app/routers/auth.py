@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.security import create_access_token, hash_password, generate_2fa_code
+from app.core.security import create_access_token, hash_password, generate_2fa_code, verify_password
 from app.models.user import User
 from app.schemas.auth import (
     RegisterRequest, RegisterResponse,
@@ -11,6 +11,7 @@ from app.schemas.auth import (
 )
 from app.services.email import send_2fa_email
 from app.services.auth import AuthService
+from app.core.dependencies import get_current_user
 from datetime import datetime, timedelta
 
 router = APIRouter()
@@ -64,6 +65,58 @@ def verify_2fa(request: Verify2FARequest, db: Session = Depends(get_db)):
     )
 
 @router.post("/login", response_model=LoginResponse, status_code=status.HTTP_200_OK)
-def login(credentials: LoginRequest, db: Session = Depends(get_db)):
+async def login(credentials: LoginRequest, request: Request, db: Session = Depends(get_db)):
     auth_service = AuthService(db)
-    return auth_service.login(credentials)
+    return await auth_service.login(credentials, request)
+from app.schemas.auth import ChangePasswordRequest
+
+@router.post("/change-password", status_code=200)
+def change_password(
+    request: ChangePasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not verify_password(request.old_password, current_user.pswd):
+        raise HTTPException(status_code=400, detail="Ancien mot de passe incorrect.")
+    
+    if request.new_password != request.confirm_password:
+        raise HTTPException(status_code=400, detail="Les mots de passe ne correspondent pas.")
+    
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Le mot de passe doit faire au moins 8 caractères.")
+
+    current_user.pswd = hash_password(request.new_password)
+    db.commit()
+    
+    return {"message": "Mot de passe modifié avec succès."}
+
+@router.patch("/toggle-2fa", status_code=200)
+def toggle_2fa(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    current_user.deux_fa_active = not current_user.deux_fa_active
+    db.commit()
+    return {
+        "message": f"2FA {'activé' if current_user.deux_fa_active else 'désactivé'} avec succès.",
+        "deux_fa_active": current_user.deux_fa_active
+    }
+
+@router.post("/verify-login-2fa", status_code=200)
+def verify_login_2fa(request: Verify2FARequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.mail == request.mail).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if user.fa_code != request.code:
+        raise HTTPException(status_code=400, detail="Code invalide")
+    if user.fa_expire is None or user.fa_expire < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Code expiré")
+    user.fa_code = None
+    user.fa_expire = None
+    db.commit()
+    token = create_access_token({"sub": str(user.id_user)})
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": user
+    }

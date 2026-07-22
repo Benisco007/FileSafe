@@ -64,12 +64,35 @@ def mes_depots(
             "permission": m.permission,
             "nb_membres": len(m.depot.membres),
             "nb_documents": len(m.depot.documents),
-            "date_creation": m.depot.date_creation
+            "date_creation": m.depot.date_creation,
+            "membres": [
+                {
+                    "id": str(mb.id),
+                    "permission": mb.permission,
+                    "statut": mb.statut,
+                    "user": {
+                        "id_user": str(mb.user.id_user),
+                        "nom": mb.user.nom,
+                        "prenom": mb.user.prenom,
+                        "mail": mb.user.mail
+                    }
+                }
+                for mb in m.depot.membres
+            ],
+            "documents": [
+                {
+                    "id_doc": str(dd.document.id_doc),
+                    "nom_doc": dd.document.nom_doc,
+                    "type_doc": dd.document.type_doc,
+                    "categorie": dd.document.categorie,
+                    "date_ajout": dd.document.date_ajout,
+                    "status": dd.document.status
+                }
+                for dd in m.depot.documents
+            ]
         }
         for m in membres
     ]
-
-
 # ── INVITER UN MEMBRE ─────────────────────────────────────────────────────────
 @router.post("/{id_depot}/inviter", status_code=201)
 def inviter_membre(

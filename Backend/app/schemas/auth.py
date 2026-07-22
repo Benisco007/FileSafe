@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, validator, Field, ConfigDict
 from uuid import UUID  
+from typing import Optional
+from datetime import datetime
 
 class RegisterRequest(BaseModel):
     nom: str
@@ -40,20 +42,29 @@ class LoginRequest(BaseModel):
 
 class UserInfo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    id_user: UUID  # <-- Changement de str à UUID ici pour accepter le format PostgreSQL
+    id_user: UUID  
     nom: str
     prenom: str
     mail: EmailStr
 
 class LoginResponse(BaseModel):
-    access_token: str
+    requires_2fa: bool = False
+    access_token: Optional[str] = None
     token_type: str
-    user: UserInfo
+    user: Optional[UserInfo] = None
+    ip_address: Optional[str] = None
+    derniere_connexion: Optional[datetime] = None
+    mail: Optional[str] = None
 
-# --- Astrid : vérification 2FA après connexion ---
+
 class Verify2FARequest(BaseModel):
     mail: EmailStr
     code: str = Field(min_length=6, max_length=6)
 
 class Verify2FAResponse(BaseModel):
     message: str
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str = Field(min_length=8)
+    confirm_password: str

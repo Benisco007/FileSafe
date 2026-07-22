@@ -22,3 +22,5 @@ class User(Base):
     documents = relationship("Document", back_populates="user")
     depots = relationship("Depot", back_populates="createur")
     depots_membres = relationship("MembreDepot", back_populates="user")
+    derniere_connexion = Column(DateTime, nullable=True)
+    deux_fa_active = Column(Boolean, default=False)
