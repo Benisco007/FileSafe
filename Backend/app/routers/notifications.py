@@ -18,12 +18,13 @@ def get_notifications(
     
     return [
         {
-            "id": str(notif.id_notif),
+            "id_notif": str(notif.id_notif),
             "titre": notif.titre,
             "description": notif.description,
-            "type": notif.type_notif,
+            "type_notif": notif.type_notif,
             "lue": notif.lue,
-            "horodatage": notif.date_creation
+            "date_creation": notif.date_creation,
+            "data": notif.data
         }
         for notif in notifications
     ]

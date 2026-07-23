@@ -1,66 +1,86 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
+from app.core.security import hash_password, verify_password, create_access_token
 from app.models.user import User
+from app.models.document import Document
+from app.models.share import Share
+from app.models.notification import Notification
+from app.models.journal_acces import JournalAcces
 
 router = APIRouter()
 
-def verifier_admin(current_user: User):
+
+# ── DÉPENDANCE ADMIN ─────────────────────────────────────────────────────────
+async def require_admin(current_user: User = Depends(get_current_user)):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Accès réservé aux administrateurs.")
+    return current_user
 
 
-# ── LISTE UTILISATEURS ────────────────────────────────────────────────────────
-@router.get("/utilisateurs", status_code=200)
-def liste_utilisateurs(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    verifier_admin(current_user)
-    users = db.query(User).all()
+# ── LOGIN ADMIN ───────────────────────────────────────────────────────────────
+@router.post("/login")
+def admin_login(payload: dict, db: Session = Depends(get_db)):
+    mail = payload.get("mail")
+    password = payload.get("password")
+
+    user = db.query(User).filter(User.mail == mail, User.role == "admin").first()
+
+    if not user or not verify_password(password, user.pswd):
+        raise HTTPException(status_code=401, detail="Identifiants invalides.")
+
+    token = create_access_token({"sub": str(user.id_user), "role": "admin"})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+# ── LISTE DES USERS ───────────────────────────────────────────────────────────
+@router.get("/users")
+def liste_users(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    users = db.query(User).filter(User.role != "admin").all()
     return [
         {
             "id_user": str(u.id_user),
             "nom": u.nom,
             "prenom": u.prenom,
             "mail": u.mail,
-            "role": u.role,
             "est_actif": u.est_actif,
-            "date_creation": u.date_creation
+            "role": u.role,
+            "date_creation": u.date_creation,
+            "derniere_connexion": u.derniere_connexion,
         }
         for u in users
     ]
 
 
-# ── BLOQUER UN COMPTE ─────────────────────────────────────────────────────────
-@router.patch("/utilisateurs/{id_user}/bloquer", status_code=200)
-def bloquer_compte(
-    id_user: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    verifier_admin(current_user)
+# ── SUSPENDRE / RÉACTIVER ─────────────────────────────────────────────────────
+@router.patch("/users/{id_user}/suspendre")
+def suspendre_user(id_user: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     user = db.query(User).filter(User.id_user == id_user).first()
+
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
-    user.est_actif = False
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Impossible de suspendre un admin.")
+
+    user.est_actif = not user.est_actif
     db.commit()
-    return {"message": f"Compte de {user.prenom} bloqué."}
+
+    statut = "réactivé" if user.est_actif else "suspendu"
+    return {"message": f"Utilisateur {statut} avec succès.", "est_actif": user.est_actif}
 
 
-# ── DÉBLOQUER UN COMPTE ───────────────────────────────────────────────────────
-@router.patch("/utilisateurs/{id_user}/debloquer", status_code=200)
-def debloquer_compte(
-    id_user: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    verifier_admin(current_user)
+# ── SUPPRIMER UN USER ─────────────────────────────────────────────────────────
+@router.delete("/users/{id_user}")
+def supprimer_user(id_user: str, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     user = db.query(User).filter(User.id_user == id_user).first()
+
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé.")
-    user.est_actif = True
+    if user.role == "admin":
+        raise HTTPException(status_code=403, detail="Impossible de supprimer un admin.")
+
+    db.delete(user)
     db.commit()
-    return {"message": f"Compte de {user.prenom} débloqué."}
+
+    return {"message": "Utilisateur supprimé avec succès."}

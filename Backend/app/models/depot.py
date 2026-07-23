@@ -17,6 +17,7 @@ class Depot(Base):
     createur = relationship("User", back_populates="depots")
     membres = relationship("MembreDepot", back_populates="depot")
     documents = relationship("DepotDocument", back_populates="depot")
+    activites = relationship("ActivityLog", back_populates="depot")
 
 
 class MembreDepot(Base):

@@ -13,9 +13,9 @@ class Share(Base):
     token = Column(String(255), unique=True, nullable=False)
     pswd_hache = Column(String(255), nullable=True)
     date_exp = Column(DateTime, nullable=True)
-    max_telechargements = Column(Integer, nullable=True)
     nb_telechargements = Column(Integer, default=0)
     champs_masques = Column(String(500), nullable=True)
+    peut_telecharger = Column(Boolean, default=True)
     est_actif = Column(Boolean, default=True)
     date_creation = Column(DateTime, default=datetime.utcnow)
 

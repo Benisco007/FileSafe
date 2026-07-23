@@ -46,6 +46,7 @@ class UserInfo(BaseModel):
     nom: str
     prenom: str
     mail: EmailStr
+    role: str = 'utilisateur'
 
 class LoginResponse(BaseModel):
     requires_2fa: bool = False

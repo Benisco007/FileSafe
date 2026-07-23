@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     MAIL_SERVER: str
     MAIL_PORT: int
     MAIL_FROM: str
+    GROQ_API_KEY: str
 
     
     class Config:

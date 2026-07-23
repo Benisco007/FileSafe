@@ -15,5 +15,6 @@ class Notification(Base):
     type_notif = Column(String(100), nullable=False)
     lue = Column(Boolean, default=False)
     date_creation = Column(DateTime, default=datetime.utcnow)
-
+    data = Column(String(500), nullable=True)
+    
     user = relationship("User", back_populates="notifications")

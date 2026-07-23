@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.database import Base, engine
-from app.routers import auth, dashboard, documents, shares, depots, admin
+from app.routers import auth, dashboard, documents, shares, depots, admin, notifications
+from fastapi import Request as FastAPIRequest
+from fastapi.responses import Response as FastAPIResponse
 
 app = FastAPI(
     title="FileSafe API",
@@ -11,10 +13,11 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 Base.metadata.create_all(bind=engine)
@@ -25,7 +28,6 @@ app.include_router(documents.router, prefix="/api/documents", tags=["Documents"]
 app.include_router(shares.router, prefix="/api/shares", tags=["Partages"])
 app.include_router(depots.router, prefix="/api/depots", tags=["Dépôts"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Administration"])
-from app.routers import notifications
 app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
 
 @app.get("/")

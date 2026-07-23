@@ -6,6 +6,10 @@ from datetime import datetime
 import os
 import uuid
 import shutil
+import asyncio
+from app.core.config import settings
+
+
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -13,6 +17,66 @@ from app.models.user import User
 from app.models.document import Document
 
 router = APIRouter()
+
+GEMINI_TYPES = {
+    "application/pdf": "application/pdf",
+    "image/jpeg": "image/jpeg",
+    "image/png": "image/png",
+}
+
+async def analyser_date_expiration(id_doc, chemin_fichier: str, type_doc: str, db):
+    try:
+        import fitz
+        from groq import Groq
+        from app.core.config import settings
+
+        if type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
+            return
+
+        texte = ""
+        if type_doc == "application/pdf":
+            doc_pdf = fitz.open(chemin_fichier)
+            for page in doc_pdf:
+                texte += page.get_text()
+            doc_pdf.close()
+        else:
+            texte = f"[Image — chemin : {chemin_fichier}]"
+
+        if not texte.strip():
+            return
+
+        client = Groq(api_key=settings.GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Tu es un assistant qui extrait des dates d'expiration de documents. Réponds UNIQUEMENT avec la date au format YYYY-MM-DD, ou AUCUNE si pas de date d'expiration."
+                },
+                {
+                    "role": "user",
+                    "content": f"Voici le contenu du document :\n\n{texte[:4000]}\n\nQuelle est la date d'expiration ?"
+                }
+            ],
+            max_tokens=20
+        )
+
+        texte_rep = response.choices[0].message.content.strip()
+
+        if texte_rep != "AUCUNE" and len(texte_rep) == 10:
+            try:
+                date_extraite = datetime.strptime(texte_rep, "%Y-%m-%d")
+                doc = db.query(Document).filter(Document.id_doc == id_doc).first()
+                if doc and not doc.date_exp:
+                    doc.date_exp = date_extraite
+                    db.add(doc)
+                    db.commit()
+                    print(f"[IA] Date expiration extraite : {date_extraite}")
+            except ValueError:
+                pass
+
+    except Exception as e:
+        print(f"[IA] Erreur Groq: {e}")
 
 UPLOAD_DIR = "app/uploads/documents"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -71,6 +135,10 @@ async def upload_document(
     db.add(nouveau_doc)
     db.commit()
     db.refresh(nouveau_doc)
+
+    # Analyse IA en arrière-plan si autorisée et date_exp non renseignée
+    if autorisation_ia and not date_expiration:
+        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, chemin, file.content_type, db))
 
     return {
         "message": "Document téléversé avec succès.",
@@ -269,3 +337,68 @@ def autoriser_ia(
         "message": f"Analyse IA {'autorisée' if doc.autorisation_ia else 'refusée'} pour ce document.",
         "autorisation_ia": doc.autorisation_ia
     }
+
+# ── CHAT IA SUR UN DOCUMENT ───────────────────────────────────────────────────
+@router.post("/{id_doc}/chat-ia", status_code=200)
+async def chat_ia(
+    id_doc: str,
+    question: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import fitz
+    from groq import Groq
+    from app.core.config import settings
+
+    doc = db.query(Document).filter(
+        Document.id_doc == id_doc,
+        Document.id_user == current_user.id_user
+    ).first()
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé.")
+
+    if not doc.autorisation_ia:
+        raise HTTPException(status_code=403, detail="L'analyse IA n'est pas autorisée pour ce document.")
+
+    if not os.path.exists(doc.chemin_fichier):
+        raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur.")
+
+    if doc.type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
+        raise HTTPException(status_code=400, detail="Type de fichier non supporté par l'IA (PDF et images uniquement).")
+
+    try:
+        texte = ""
+        if doc.type_doc == "application/pdf":
+            doc_pdf = fitz.open(doc.chemin_fichier)
+            for page in doc_pdf:
+                texte += page.get_text()
+            doc_pdf.close()
+        else:
+            texte = f"[Ce document est une image : {doc.nom_doc}]"
+
+        if not texte.strip():
+            raise HTTPException(status_code=400, detail="Impossible d'extraire le contenu de ce document.")
+
+        client = Groq(api_key=settings.GROQ_API_KEY)
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {
+                    "role": "system",
+                    "content": f"Tu es un assistant documentaire. Voici le contenu du document '{doc.nom_doc}' :\n\n{texte[:6000]}\n\nRéponds aux questions de l'utilisateur en français, de façon claire et précise."
+                },
+                {
+                    "role": "user",
+                    "content": question
+                }
+            ],
+            max_tokens=1024
+        )
+
+        return {"reponse": response.choices[0].message.content.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur IA : {str(e)}")
