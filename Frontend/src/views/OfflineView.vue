@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useTheme } from '@/composables/useTheme'
+import api from '../api'
+import PreviewModal from '../components/documents/PreviewModal.vue'
 
 const { isDark, toggleTheme } = useTheme()
 
@@ -10,27 +12,55 @@ const isLoading = ref(true)
 // ─── Documents hors ligne ─────────────────────────────────────────
 const offlineDocs = ref([])
 
+// ─── Prévisualisation ──────────────────────────────────────────────
+const isPreviewModalOpen = ref(false)
+const previewUrl = ref('')
+const previewName = ref('')
+const previewMime = ref('')
+const previewBlob = ref(null)
+
+const previewDoc = async (doc) => {
+  try {
+    const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger?inline=true`, { responseType: 'blob' })
+    const type = doc.type_doc || headers['content-type'] || 'application/pdf'
+    const blob = new Blob([data], { type })
+    
+    if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+    
+    previewBlob.value = blob
+    previewUrl.value = URL.createObjectURL(blob)
+    previewName.value = doc.nom_doc
+    previewMime.value = type
+    isPreviewModalOpen.value = true
+  } catch (err) {
+    console.error('Erreur lors de la prévisualisation', err)
+    alert("Impossible de charger l'aperçu de ce document.")
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────
-const documentIconClass = (type) => {
-  if (type === 'pdf') return 'ti-file-type-pdf'
-  if (type === 'image') return 'ti-photo'
-  if (type === 'word') return 'ti-file-type-doc'
-  if (type === 'excel') return 'ti-file-spreadsheet'
-  if (type === 'identity') return 'ti-id-badge'
-  if (type === 'passport') return 'ti-passport'
-  if (type === 'certificate') return 'ti-certificate'
+const documentIconClass = (mimeType) => {
+  if (!mimeType) return 'ti-file-text'
+  if (mimeType.includes('pdf')) return 'ti-file-type-pdf'
+  if (mimeType.includes('image')) return 'ti-photo'
+  if (mimeType.includes('word')) return 'ti-file-type-doc'
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheet')) return 'ti-file-spreadsheet'
   return 'ti-file-text'
 }
 
 const removeDocument = async (id) => {
-  // TODO: appeler DELETE /api/offline/${id}
-  offlineDocs.value = offlineDocs.value.filter((doc) => doc.id !== id)
+  try {
+    await api.patch(`/api/documents/${id}/marquer-critique`)
+    offlineDocs.value = offlineDocs.value.filter((doc) => doc.id_doc !== id)
+  } catch (error) {
+    console.error('Erreur lors du retrait du document hors ligne :', error)
+  }
 }
 
 // ─── Chargement des données ───────────────────────────────────────
 const fetchOfflineDocs = async () => {
-  // TODO: remplacer par → const res = await fetch('/api/offline')
-  // offlineDocs.value = await res.json()
+  const { data } = await api.get('/api/documents/')
+  offlineDocs.value = data.filter((d) => d.est_critique)
 }
 
 // ─── Déclenchement au montage ─────────────────────────────────────
@@ -99,21 +129,21 @@ onMounted(async () => {
         <div v-else class="offline-list">
           <div
             v-for="doc in offlineDocs"
-            :key="doc.id"
+            :key="doc.id_doc"
             class="offline-row"
           >
             <div class="doc-preview">
-              <i :class="'ti ' + documentIconClass(doc.type)"></i>
+              <i :class="'ti ' + documentIconClass(doc.type_doc)"></i>
             </div>
             <div class="doc-info">
-              <p class="doc-name">{{ doc.nom }}</p>
-              <p class="doc-desc">{{ doc.description }}</p>
+              <p class="doc-name">{{ doc.nom_doc }}</p>
+              <p class="doc-desc">{{ doc.categorie }}</p>
             </div>
             <div class="doc-actions">
-              <button class="btn-edit">
-                <i class="ti ti-pencil"></i> Modifier
+              <button class="btn-edit" @click="previewDoc(doc)">
+                <i class="ti ti-eye"></i> Aperçu
               </button>
-              <button class="btn-remove" @click="removeDocument(doc.id)">
+              <button class="btn-remove" @click="removeDocument(doc.id_doc)">
                 <i class="ti ti-trash"></i> Retirer
               </button>
             </div>
@@ -121,6 +151,16 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <!-- Modal de prévisualisation -->
+    <PreviewModal
+      :isOpen="isPreviewModalOpen"
+      :fileUrl="previewUrl"
+      :fileName="previewName"
+      :mimeType="previewMime"
+      :fileBlob="previewBlob"
+      @close="isPreviewModalOpen = false"
+    />
   </div>
 </template>
 

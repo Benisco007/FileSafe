@@ -8,23 +8,26 @@ const alertCount = ref(0)
 
 const fetchAlerts = async () => {
   const token = localStorage.getItem('token')
-  if (!token) return  // ← ne rien faire si pas connecté
+  if (!token) return
 
   try {
-    const { data } = await api.get('/api/dashboard/stats')
-    alertCount.value = data.alertes ? data.alertes.length : 0
+    const { data } = await api.get('/api/notifications/')
+    alertCount.value = data.filter(n => !n.lue).length
   } catch (err) {
-    console.error('Erreur lors de la récupération des alertes', err)
+    console.error('Erreur récupération notifications', err)
   }
 }
 
 onMounted(() => {
   fetchAlerts()
+  // Rafraîchir toutes les 30 secondes
+  setInterval(fetchAlerts, 30000)
 })
 
 const goToNotifications = () => {
   router.push('/notifications')
 }
+
 </script>
 
 <template>

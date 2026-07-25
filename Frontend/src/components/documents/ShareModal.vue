@@ -36,7 +36,7 @@ const currentDocument = computed(() => {
 const destinataire = ref('')
 const duree = ref('24h')
 const joursPersonnalises = ref(1)
-const limitesTelechargements = ref('illimite')
+const peutTelecharger = ref(true)
 
 const isGenerating = ref(false)
 const generatedLink = ref(null)
@@ -48,14 +48,10 @@ const errorMsg = ref('')
 const handleGenerateLink = async () => {
   errorMsg.value = ''
   
-  // Calculer durée en heures
   let dureeHeures = 24
   if (duree.value === '1h') dureeHeures = 1
   if (duree.value === '7j') dureeHeures = 168
   if (duree.value === 'perso') dureeHeures = joursPersonnalises.value * 24
-  
-  // Limites téléchargements
-  let maxTelechargements = limitesTelechargements.value === 'illimite' ? null : parseInt(limitesTelechargements.value)
 
   const docId = currentDocument.value.id_doc
   if (!docId) {
@@ -65,15 +61,14 @@ const handleGenerateLink = async () => {
 
   try {
     isGenerating.value = true
-    let url = `/api/shares/${docId}/partager?duree_heures=${dureeHeures}`
-    if (maxTelechargements) url += `&max_telechargements=${maxTelechargements}`
+    let url = `/api/shares/${docId}/partager?duree_heures=${dureeHeures}&peut_telecharger=${peutTelecharger.value}`
     if (destinataire.value) url += `&email_destinataire=${encodeURIComponent(destinataire.value.trim())}`
 
     const { data } = await api.post(url, {})
 
     if (data.lien) {
-      generatedLink.value = data.lien  // http://localhost:5173/share/{token}
-      downloadLink.value = data.lien   // C'est ce lien qu'on copie pour l'accès
+      generatedLink.value = data.lien
+      downloadLink.value = data.lien
     } else {
       errorMsg.value = `Erreur: champ "lien" absent. Reçu: ${JSON.stringify(data)}`
       return
@@ -135,7 +130,7 @@ const formatDate = (dateString) => {
           
           <div class="form-group">
             <label>Destinataire (optionnel)</label>
-            <input type="text" v-model="destinataire" placeholder="Email ou nom du destinataire">
+            <input type="text" v-model="destinataire" placeholder="Email du destinataire">
           </div>
           
           <div class="form-group">
@@ -158,14 +153,15 @@ const formatDate = (dateString) => {
           </div>
           
           <div class="form-group">
-            <label>Limite de téléchargements</label>
-            <select v-model="limitesTelechargements">
-              <option value="illimite">Illimité</option>
-              <option value="1">1</option>
-              <option value="3">3</option>
-              <option value="5">5</option>
-              <option value="10">10</option>
-            </select>
+            <label>Autorisation de téléchargement</label>
+            <label class="toggle-label">
+              <input type="checkbox" v-model="peutTelecharger">
+              Autoriser le destinataire à télécharger le document
+            </label>
+            <p class="hint-text">
+              <i class="ti ti-info-circle"></i>
+              {{ peutTelecharger ? 'Le destinataire pourra lire et télécharger le document.' : 'Le destinataire pourra uniquement lire le document en ligne.' }}
+            </p>
           </div>
           
           <p v-if="errorMsg" class="error-msg"><i class="ti ti-alert-circle"></i> {{ errorMsg }}</p>
@@ -197,8 +193,8 @@ const formatDate = (dateString) => {
           <p class="copy-feedback" v-if="copySuccess">Copié !</p>
           
           <div class="share-details">
-            <p>Expire le : <strong>{{ formatDate(shareDetails?.date_expiration) }}</strong></p>
-            <p>Téléchargements : <strong>0 / {{ shareDetails?.max_telechargements || '∞' }}</strong></p>
+            <p>Expire le : <strong>{{ formatDate(shareDetails?.expire_le) }}</strong></p>
+            <p>Téléchargement : <strong>{{ peutTelecharger ? 'Autorisé' : 'Lecture seule' }}</strong></p>
           </div>
         </div>
         
@@ -348,6 +344,31 @@ const formatDate = (dateString) => {
   opacity: 0.5;
 }
 
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  accent-color: var(--primary);
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.hint-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
 .error-msg {
   color: var(--danger);
   font-size: 14px;
@@ -405,7 +426,6 @@ const formatDate = (dateString) => {
   cursor: not-allowed;
 }
 
-/* Success State */
 .success-header {
   display: flex;
   flex-direction: column;
@@ -430,6 +450,13 @@ const formatDate = (dateString) => {
 
 .text-center {
   text-align: center;
+}
+
+.link-label {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 8px;
 }
 
 .link-box {

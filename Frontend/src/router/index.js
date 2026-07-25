@@ -14,6 +14,7 @@ import NotificationsView from '../views/NotificationsView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import AdminView from '../views/AdminView.vue'
 import OfflineView from '../views/OfflineView.vue'
+import AIView from '../views/AIView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -37,12 +38,13 @@ const router = createRouter({
     { path: '/settings', name: 'settings', component: SettingsView, meta: { requiresAuth: true } },
     { path: '/admin', name: 'admin', component: AdminView, meta: { requiresAuth: true, requiresAdmin: true } },
 
+    { path: '/ai', name: 'ai', component: AIView, meta: { requiresAuth: true } },
     // Redirect par défaut
     { path: '/:pathMatch(.*)*', redirect: '/login' }
   ]
 })
 
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
 
   // Routes publiques : pas de vérification d'auth
@@ -51,6 +53,11 @@ router.beforeEach((to, from) => {
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     return '/login'
+  }
+
+  // Redirection automatique des admins vers /admin s'ils tentent d'accéder à la racine '/'
+  if (authStore.user?.role === 'admin' && to.path === '/') {
+    return '/admin'
   }
 
   if (to.meta.requiresAdmin && authStore.user?.role !== 'admin') {

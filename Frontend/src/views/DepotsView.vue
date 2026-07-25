@@ -1,11 +1,13 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import PreviewModal from '../components/documents/PreviewModal.vue'
 
 const depots = ref([])
 const isLoading = ref(true)
 const selectedDepot = ref(null)
+const activites = ref([])
+const isLoadingActivites = ref(false)
 
 const isCreateModalOpen = ref(false)
 const newDepot = ref({ nom_dep: '', type_dep: 'Equipe' })
@@ -15,7 +17,6 @@ const isInviteModalOpen = ref(false)
 const newInvite = ref({ email: '', permission: 'lecture' })
 const isInviting = ref(false)
 
-// Documents de l'utilisateur pour le modal d'ajout
 const userDocs = ref([])
 const isAddDocModalOpen = ref(false)
 const selectedDocId = ref('')
@@ -26,6 +27,11 @@ const previewUrl = ref('')
 const previewName = ref('')
 const previewMime = ref('')
 const previewBlob = ref(null)
+
+// Permission de l'utilisateur connecté dans le dépôt sélectionné
+const maPermission = computed(() => selectedDepot.value?.permission || 'lecture')
+const estAdmin = computed(() => maPermission.value === 'admin')
+const peutEcrire = computed(() => maPermission.value === 'admin' || maPermission.value === 'ecriture')
 
 const fetchUserDocs = async () => {
   try {
@@ -48,13 +54,12 @@ const addDocToDepot = async () => {
     await api.post(`/api/depots/${selectedDepot.value.id_depot}/documents/${selectedDocId.value}`)
     isAddDocModalOpen.value = false
     selectedDocId.value = ''
-    // Rafraîchir le dépôt
     const { data } = await api.get('/api/depots/')
     const updated = data.find(d => d.id_depot === selectedDepot.value.id_depot)
     if (updated) selectedDepot.value = { ...updated, activeTab: 'Documents' }
   } catch (err) {
     console.error(err)
-    alert('Erreur lors de l\'ajout du document')
+    alert(err.response?.data?.detail || "Erreur lors de l'ajout du document")
   } finally {
     isAddingDoc.value = false
   }
@@ -69,6 +74,19 @@ const fetchDepots = async () => {
     console.error('Erreur lors de la récupération des dépôts', err)
   } finally {
     isLoading.value = false
+  }
+}
+
+const fetchActivites = async () => {
+  if (!selectedDepot.value) return
+  try {
+    isLoadingActivites.value = true
+    const { data } = await api.get(`/api/depots/${selectedDepot.value.id_depot}/activites`)
+    activites.value = data
+  } catch (err) {
+    console.error('Erreur activités', err)
+  } finally {
+    isLoadingActivites.value = false
   }
 }
 
@@ -97,17 +115,36 @@ const openDepot = (depot) => {
 
 const closeDepot = () => {
   selectedDepot.value = null
+  activites.value = []
   fetchDepots()
+}
+
+const onTabChange = (tab) => {
+  selectedDepot.value.activeTab = tab
+  if (tab === 'Activité') fetchActivites()
 }
 
 const updatePermission = async (membre) => {
   try {
-    await api.patch(`/api/depots/${selectedDepot.value.id_depot}/membres/${membre.user.id_user}/permission?permission=${nouvellePermission}`, {
-      permission: membre.permission
-    })
+    await api.patch(`/api/depots/${selectedDepot.value.id_depot}/membres/${membre.user.id_user}/permission?permission=${membre.permission}`)
   } catch (err) {
     console.error(err)
-    alert('Erreur lors de la modification de la permission')
+    alert(err.response?.data?.detail || 'Erreur lors de la modification de la permission')
+    fetchDepots()
+  }
+}
+
+const retirerMembre = async (membre) => {
+  if (!confirm(`Retirer ${membre.user.prenom} ${membre.user.nom} du dépôt ?`)) return
+  try {
+    await api.delete(`/api/depots/${selectedDepot.value.id_depot}/membres/${membre.user.id_user}`)
+    const { data } = await api.get('/api/depots/')
+    const updated = data.find(d => d.id_depot === selectedDepot.value.id_depot)
+    if (updated) selectedDepot.value = { ...updated, activeTab: 'Membres' }
+    else closeDepot()
+  } catch (err) {
+    console.error(err)
+    alert(err.response?.data?.detail || 'Erreur lors du retrait du membre')
   }
 }
 
@@ -117,17 +154,10 @@ const inviteMember = async () => {
     await api.post(`/api/depots/${selectedDepot.value.id_depot}/inviter?mail_invite=${encodeURIComponent(newInvite.value.email)}&permission=${newInvite.value.permission || 'lecture'}`)
     isInviteModalOpen.value = false
     newInvite.value = { email: '', permission: 'lecture' }
-    // Ideally we would fetch just this depot's members, but we'll re-fetch all for simplicity
     fetchDepots()
-    // Find the updated depot to update selectedDepot
-    const { data } = await api.get('/api/depots/')
-    const updated = data.find(d => d.id_dep === selectedDepot.value.id_dep)
-    if (updated) {
-      selectedDepot.value = { ...updated, activeTab: selectedDepot.value.activeTab }
-    }
   } catch (err) {
     console.error(err)
-    alert('Erreur lors de l\'invitation')
+    alert(err.response?.data?.detail || "Erreur lors de l'invitation")
   } finally {
     isInviting.value = false
   }
@@ -136,19 +166,17 @@ const inviteMember = async () => {
 const previewDoc = async (doc) => {
   try {
     const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger?inline=true`, { responseType: 'blob' })
-    const type = doc.type_mime || doc.type_doc || headers['content-type'] || 'application/pdf'
+    const type = doc.type_doc || headers['content-type'] || 'application/pdf'
     const blob = new Blob([data], { type })
-    
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-    
     previewBlob.value = blob
     previewUrl.value = URL.createObjectURL(blob)
     previewName.value = doc.nom_doc
     previewMime.value = type
     isPreviewModalOpen.value = true
   } catch (err) {
-    console.error('Erreur lors de la prévisualisation', err)
-    alert("Impossible de charger l'aperçu de ce document.")
+    console.error('Erreur prévisualisation', err)
+    alert("Impossible de charger l'aperçu.")
   }
 }
 
@@ -158,14 +186,9 @@ const downloadDoc = async (doc) => {
     const url = window.URL.createObjectURL(new Blob([data]))
     const link = document.createElement('a')
     link.href = url
-    
     let fileName = doc.nom_doc || 'document'
-    const contentDisposition = headers['content-disposition']
-    if (contentDisposition) {
-      const match = contentDisposition.match(/filename="(.+)"/)
-      if (match && match[1]) fileName = match[1]
-    }
-    
+    const cd = headers['content-disposition']
+    if (cd) { const m = cd.match(/filename="(.+)"/); if (m) fileName = m[1] }
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
@@ -174,6 +197,25 @@ const downloadDoc = async (doc) => {
     console.error('Erreur téléchargement', err)
     alert("Impossible de télécharger ce document.")
   }
+}
+
+const getActionIcon = (type) => {
+  const icons = {
+    upload: 'ti-upload text-success',
+    consultation: 'ti-eye text-primary',
+    telechargement: 'ti-download text-warning',
+    invitation: 'ti-user-plus text-primary',
+    adhesion: 'ti-user-check text-success',
+    retrait_membre: 'ti-user-minus text-danger',
+    modification_role: 'ti-pencil text-warning',
+    creation_depot: 'ti-folder-plus text-primary',
+  }
+  return icons[type] || 'ti-activity text-secondary'
+}
+
+const formatDate = (d) => {
+  if (!d) return ''
+  return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(d))
 }
 </script>
 
@@ -201,7 +243,7 @@ const downloadDoc = async (doc) => {
       </div>
 
       <div v-else class="depots-grid">
-        <div class="depot-card" v-for="depot in depots" :key="depot.id_dep">
+        <div class="depot-card" v-for="depot in depots" :key="depot.id_depot">
           <div class="depot-header">
             <div class="depot-icon"><i class="ti ti-folder-shared"></i></div>
             <span class="depot-type">{{ depot.type_dep }}</span>
@@ -209,28 +251,21 @@ const downloadDoc = async (doc) => {
           <h3 class="depot-name">{{ depot.nom_dep }}</h3>
           
           <div class="depot-stats">
-            <div class="stat-item">
-              <i class="ti ti-file"></i>
-              <span>{{ depot.documents?.length || 0 }} documents</span>
-            </div>
-            <div class="stat-item">
-              <i class="ti ti-users"></i>
-              <span>{{ depot.membres?.length || 0 }} membres</span>
-            </div>
+            <div class="stat-item"><i class="ti ti-file"></i><span>{{ depot.documents?.length || 0 }} documents</span></div>
+            <div class="stat-item"><i class="ti ti-users"></i><span>{{ depot.nb_membres || 0 }} membres</span></div>
           </div>
 
           <div class="members-stack">
             <div 
               class="member-avatar" 
-              v-for="(membre, idx) in (depot.membres || []).slice(0, 3)" 
+              v-for="(membre, idx) in (depot.membres || []).filter(m => m.statut === 'accepte').slice(0, 3)" 
               :key="idx"
-              :title="membre.user?.prenom"
+              :title="membre.user?.prenom + (membre.permission === 'admin' ? ' (Admin)' : '')"
             >
               {{ membre.user?.prenom?.charAt(0).toUpperCase() || 'U' }}
+              <span v-if="membre.permission === 'admin'" class="crown">👑</span>
             </div>
-            <div class="member-avatar more" v-if="(depot.membres?.length || 0) > 3">
-              +{{ depot.membres.length - 3 }}
-            </div>
+            <div class="member-avatar more" v-if="(depot.nb_membres || 0) > 3">+{{ depot.nb_membres - 3 }}</div>
           </div>
 
           <button class="btn-outline" @click="openDepot(depot)">Accéder</button>
@@ -249,115 +284,133 @@ const downloadDoc = async (doc) => {
           <div>
             <h1>{{ selectedDepot.nom_dep }}</h1>
             <span class="depot-type">{{ selectedDepot.type_dep }}</span>
+            <span class="my-role-badge">Mon rôle : {{ maPermission }}</span>
           </div>
         </div>
-        <button class="btn-primary" @click="isInviteModalOpen = true" v-if="selectedDepot.activeTab === 'Membres'">
+        <button class="btn-primary" @click="isInviteModalOpen = true" v-if="estAdmin && selectedDepot.activeTab === 'Membres'">
           <i class="ti ti-user-plus"></i> Inviter
         </button>
       </div>
 
       <div class="tabs">
-        <button 
-          :class="['tab', { active: selectedDepot.activeTab === 'Documents' }]"
-          @click="selectedDepot.activeTab = 'Documents'"
-        >
+        <button :class="['tab', { active: selectedDepot.activeTab === 'Documents' }]" @click="onTabChange('Documents')">
           <i class="ti ti-files"></i> Documents
         </button>
-        <button 
-          :class="['tab', { active: selectedDepot.activeTab === 'Membres' }]"
-          @click="selectedDepot.activeTab = 'Membres'"
-        >
+        <button :class="['tab', { active: selectedDepot.activeTab === 'Membres' }]" @click="onTabChange('Membres')">
           <i class="ti ti-users"></i> Membres
         </button>
-        <button 
-          :class="['tab', { active: selectedDepot.activeTab === 'Activité' }]"
-          @click="selectedDepot.activeTab = 'Activité'"
-        >
+        <button :class="['tab', { active: selectedDepot.activeTab === 'Activité' }]" @click="onTabChange('Activité')">
           <i class="ti ti-activity"></i> Activité
         </button>
       </div>
 
       <div class="tab-content">
         <!-- Onglet Documents -->
-        <!-- Onglet Documents -->
-    <div v-if="selectedDepot.activeTab === 'Documents'">
-      <div class="tab-actions">
-        <button class="btn-primary" @click="openAddDocModal">
-          <i class="ti ti-plus"></i> Ajouter un document
-        </button>
-      </div>
-
-      <div v-if="!selectedDepot.documents || selectedDepot.documents.length === 0" class="empty-state">
-        <i class="ti ti-file-off"></i>
-        <p>Aucun document dans ce dépôt</p>
-        <span>Ajoutez des documents depuis votre coffre personnel</span>
-      </div>
-
-      <div v-else class="docs-list">
-        <div class="doc-item" v-for="doc in selectedDepot.documents" :key="doc.id_doc">
-          <i class="ti ti-file-text doc-icon"></i>
-          <div class="doc-info">
-            <span class="doc-name">{{ doc.nom_doc }}</span>
-            <span class="doc-meta">{{ doc.categorie }} • {{ new Date(doc.date_ajout).toLocaleDateString('fr-FR') }}</span>
+        <div v-if="selectedDepot.activeTab === 'Documents'">
+          <div class="tab-actions" v-if="peutEcrire">
+            <button class="btn-primary" @click="openAddDocModal">
+              <i class="ti ti-plus"></i> Ajouter un document
+            </button>
           </div>
-          <span :class="['badge', doc.status === 'Valide' ? 'badge-valide' : 'badge-expire']">
-            {{ doc.status }}
-          </span>
-          <div class="doc-actions-inline">
-            <button class="action-btn" title="Aperçu" @click="previewDoc(doc)">
-              <i class="ti ti-eye"></i>
-            </button>
-            <button class="action-btn" title="Télécharger" @click="downloadDoc(doc)">
-              <i class="ti ti-download"></i>
-            </button>
+
+          <div v-if="!selectedDepot.documents || selectedDepot.documents.length === 0" class="empty-state">
+            <i class="ti ti-file-off"></i>
+            <p>Aucun document dans ce dépôt</p>
+            <span v-if="peutEcrire">Ajoutez des documents depuis votre coffre personnel</span>
+          </div>
+
+          <div v-else class="docs-list">
+            <div class="doc-item" v-for="doc in selectedDepot.documents" :key="doc.id_doc">
+              <i class="ti ti-file-text doc-icon"></i>
+              <div class="doc-info">
+                <span class="doc-name">{{ doc.nom_doc }}</span>
+                <span class="doc-meta">{{ doc.categorie }} • {{ new Date(doc.date_ajout).toLocaleDateString('fr-FR') }}</span>
+              </div>
+              <span :class="['badge', doc.status === 'Valide' ? 'badge-valide' : 'badge-expire']">{{ doc.status }}</span>
+              <div class="doc-actions-inline">
+                <button class="action-btn" title="Aperçu" @click="previewDoc(doc)"><i class="ti ti-eye"></i></button>
+                <button class="action-btn" title="Télécharger" @click="downloadDoc(doc)" v-if="peutEcrire"><i class="ti ti-download"></i></button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
-            <!-- Onglet Membres -->
-            <div v-if="selectedDepot.activeTab === 'Membres'">
-              <table class="members-table">
-                <thead>
-                  <tr>
-                    <th>Utilisateur</th>
-                    <th>Rôle / Permission</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="membre in selectedDepot.membres" :key="membre.id">
-                    <td>
-                      <div class="user-info">
-                        <div class="member-avatar">{{ membre.user?.prenom?.charAt(0).toUpperCase() || 'U' }}</div>
-                        <div class="user-details">
-                          <span class="user-name">{{ membre.user?.prenom }} {{ membre.user?.nom }}</span>
-                          <span class="user-email">{{ membre.user?.email }}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <select v-model="membre.permission" @change="updatePermission(membre)" class="permission-select">
-                        <option value="admin">Admin</option>
-                        <option value="ecriture">Écriture</option>
-                        <option value="lecture">Lecture</option>
-                      </select>
-                    </td>
-                    <td>
-                      <button class="btn-icon text-danger" title="Retirer">
-                        <i class="ti ti-user-minus"></i>
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+        <!-- Onglet Membres -->
+        <div v-if="selectedDepot.activeTab === 'Membres'">
+          <table class="members-table">
+            <thead>
+              <tr>
+                <th>Utilisateur</th>
+                <th>Rôle</th>
+                <th v-if="estAdmin">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="membre in selectedDepot.membres" :key="membre.id">
+                <td>
+                  <div class="user-info">
+                    <div class="member-avatar">{{ membre.user?.prenom?.charAt(0).toUpperCase() || 'U' }}</div>
+                    <div class="user-details">
+                      <span class="user-name">
+                        {{ membre.user?.prenom }} {{ membre.user?.nom }}
+                        <span v-if="membre.permission === 'admin'" class="admin-badge">Admin</span>
+                        <span v-if="membre.statut === 'en_attente'" class="pending-badge">En attente</span>
+                      </span>
+                      <span class="user-email">{{ membre.user?.mail }}</span>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <select 
+                    v-if="estAdmin && membre.user?.id_user !== selectedDepot.id_createur"
+                    v-model="membre.permission" 
+                    @change="updatePermission(membre)" 
+                    class="permission-select"
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="ecriture">Écriture</option>
+                    <option value="lecture">Lecture</option>
+                  </select>
+                  <span v-else class="role-label">{{ membre.permission }}</span>
+                </td>
+                <td v-if="estAdmin">
+                  <button 
+                    class="btn-icon text-danger" 
+                    title="Retirer"
+                    @click="retirerMembre(membre)"
+                    v-if="membre.user?.id_user !== selectedDepot.id_createur"
+                  >
+                    <i class="ti ti-user-minus"></i>
+                  </button>
+                  <span v-else class="role-label" title="Le créateur ne peut pas être retiré">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
         <!-- Onglet Activité -->
         <div v-if="selectedDepot.activeTab === 'Activité'">
-          <div class="empty-state">
+          <div v-if="isLoadingActivites" class="skeleton-list">
+            <div class="skeleton-item" v-for="i in 4" :key="i"></div>
+          </div>
+          <div v-else-if="activites.length === 0" class="empty-state">
             <i class="ti ti-activity"></i>
-            <p>Historique d'activité bientôt disponible</p>
+            <p>Aucune activité enregistrée</p>
+          </div>
+          <div v-else class="activites-list">
+            <div class="activite-item" v-for="(log, idx) in activites" :key="idx">
+              <div class="activite-icon">
+                <i :class="['ti', getActionIcon(log.type_action)]"></i>
+              </div>
+              <div class="activite-content">
+                <span class="activite-detail">{{ log.detail || log.type_action }}</span>
+                <span class="activite-doc" v-if="log.nom_document">📄 {{ log.nom_document }}</span>
+                <span class="activite-meta">
+                  {{ log.user?.prenom }} {{ log.user?.nom }} • {{ formatDate(log.date_action) }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -397,7 +450,7 @@ const downloadDoc = async (doc) => {
           <input type="email" v-model="newInvite.email" placeholder="utilisateur@exemple.com">
         </div>
         <div class="form-group">
-          <label>Permission</label>
+          <label>Rôle</label>
           <select v-model="newInvite.permission">
             <option value="lecture">Lecture seule</option>
             <option value="ecriture">Écriture</option>
@@ -412,26 +465,27 @@ const downloadDoc = async (doc) => {
         </div>
       </div>
     </div>
-    <!-- Modal Ajouter Document au Dépôt -->
-<div v-if="isAddDocModalOpen" class="modal-overlay" @click.self="isAddDocModalOpen = false">
-  <div class="modal-content">
-    <h2>Ajouter un document au dépôt</h2>
-    <div class="form-group">
-      <label>Choisir un document</label>
-      <select v-model="selectedDocId">
-        <option value="">-- Sélectionner un document --</option>
-        <option v-for="doc in userDocs" :key="doc.id_doc" :value="doc.id_doc">
-          {{ doc.nom_doc }} ({{ doc.categorie }})
-        </option>
-      </select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn-cancel" @click="isAddDocModalOpen = false">Annuler</button>
-      <button class="btn-primary" @click="addDocToDepot" :disabled="isAddingDoc || !selectedDocId">
-        {{ isAddingDoc ? 'Ajout...' : 'Ajouter' }}
-      </button>
-    </div>
-  </div>
+
+    <!-- Modal Ajouter Document -->
+    <div v-if="isAddDocModalOpen" class="modal-overlay" @click.self="isAddDocModalOpen = false">
+      <div class="modal-content">
+        <h2>Ajouter un document au dépôt</h2>
+        <div class="form-group">
+          <label>Choisir un document</label>
+          <select v-model="selectedDocId">
+            <option value="">-- Sélectionner un document --</option>
+            <option v-for="doc in userDocs" :key="doc.id_doc" :value="doc.id_doc">
+              {{ doc.nom_doc }} ({{ doc.categorie }})
+            </option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-cancel" @click="isAddDocModalOpen = false">Annuler</button>
+          <button class="btn-primary" @click="addDocToDepot" :disabled="isAddingDoc || !selectedDocId">
+            {{ isAddingDoc ? 'Ajout...' : 'Ajouter' }}
+          </button>
+        </div>
+      </div>
     </div>
     
     <PreviewModal
@@ -442,483 +496,116 @@ const downloadDoc = async (doc) => {
       :fileBlob="previewBlob"
       @close="isPreviewModalOpen = false"
     />
-
   </div>
 </template>
 
 <style scoped>
-.depots-view {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
+.depots-view { display: flex; flex-direction: column; gap: 24px; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.page-header h1 { font-size: 24px; font-weight: 600; color: var(--text-primary); }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
+.btn-primary { background-color: var(--primary); color: var(--bg-primary); border: none; padding: 10px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background-color 0.2s; }
+.btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.page-header h1 {
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
+.depots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+.depot-card { background-color: var(--bg-card); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 16px; transition: transform 0.2s, box-shadow 0.2s; }
+.depot-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
 
-.btn-primary {
-  background-color: var(--primary);
-  color: var(--bg-primary);
-  border: none;
-  padding: 10px 20px;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background-color 0.2s;
-}
+.depot-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.depot-icon { width: 48px; height: 48px; background-color: rgba(244,180,0,0.1); color: var(--primary); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+.depot-icon.large { width: 64px; height: 64px; font-size: 32px; }
+.depot-type { background-color: var(--bg-primary); padding: 4px 10px; border-radius: 20px; font-size: 12px; color: var(--text-secondary); }
+.depot-name { font-size: 18px; font-weight: 600; color: var(--text-primary); margin: 0; }
+.depot-stats { display: flex; gap: 16px; font-size: 13px; color: #aaa; }
+.stat-item { display: flex; align-items: center; gap: 6px; }
 
-.btn-primary:hover:not(:disabled) {
-  background-color: var(--primary-hover);
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Grille des dépôts */
-.depots-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
-}
-
-.depot-card {
-  background-color: var(--bg-card);
-  border-radius: 18px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-.depot-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-}
-
-.depot-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.depot-icon {
-  width: 48px;
-  height: 48px;
-  background-color: rgba(244, 180, 0, 0.1);
-  color: var(--primary);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-}
-
-.depot-icon.large {
-  width: 64px;
-  height: 64px;
-  font-size: 32px;
-}
-
-.depot-type {
-  background-color: var(--bg-primary);
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.depot-name {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.depot-stats {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: #aaa;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.members-stack {
-  display: flex;
-  align-items: center;
-  margin-top: auto;
-}
-
-.member-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background-color: var(--input-border);
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  border: 2px solid var(--bg-card);
-  margin-left: -8px;
-  position: relative;
-}
-
-.member-avatar:first-child {
-  margin-left: 0;
-}
-
+.members-stack { display: flex; align-items: center; margin-top: auto; position: relative; }
+.member-avatar { width: 32px; height: 32px; border-radius: 50%; background-color: var(--input-border); color: var(--text-primary); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; border: 2px solid var(--bg-card); margin-left: -8px; position: relative; }
+.member-avatar:first-child { margin-left: 0; }
 .member-avatar:nth-child(1) { background-color: var(--danger); z-index: 3; }
 .member-avatar:nth-child(2) { background-color: #3B82F6; z-index: 2; }
 .member-avatar:nth-child(3) { background-color: #10B981; z-index: 1; }
+.member-avatar.more { background-color: var(--bg-primary); color: var(--text-secondary); z-index: 0; }
+.crown { position: absolute; top: -6px; right: -4px; font-size: 10px; }
 
-.member-avatar.more {
-  background-color: var(--bg-primary);
-  color: var(--text-secondary);
-  z-index: 0;
-}
+.btn-outline { background-color: transparent; border: 1px solid var(--primary); color: var(--primary); padding: 10px; border-radius: 8px; font-weight: 500; cursor: pointer; margin-top: 8px; transition: all 0.2s; }
+.btn-outline:hover { background-color: var(--primary); color: var(--bg-primary); }
 
-.btn-outline {
-  background-color: transparent;
-  border: 1px solid var(--primary);
-  color: var(--primary);
-  padding: 10px;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
-  margin-top: 8px;
-  transition: all 0.2s;
-}
+.inner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+.btn-back { background: none; border: none; color: var(--text-secondary); font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: color 0.2s; width: 100%; margin-bottom: -10px; }
+.btn-back:hover { color: var(--text-primary); }
+.depot-title-area { display: flex; align-items: center; gap: 16px; }
+.depot-title-area h1 { font-size: 28px; margin: 0 0 4px 0; }
+.my-role-badge { display: inline-block; background-color: rgba(244,180,0,0.15); color: var(--primary); padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; margin-left: 8px; }
 
-.btn-outline:hover {
-  background-color: var(--primary);
-  color: var(--bg-primary);
-}
+.tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-bottom: 24px; }
+.tab { background: none; border: none; color: var(--text-secondary); padding: 12px 24px; font-size: 15px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.tab:hover { color: var(--text-primary); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-/* Vue Intérieure */
-.inner-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-  flex-wrap: wrap;
-  gap: 16px;
-}
+.tab-actions { margin-bottom: 16px; }
+.docs-list { display: flex; flex-direction: column; gap: 8px; }
+.doc-item { display: flex; align-items: center; gap: 12px; background-color: var(--bg-card); padding: 16px; border-radius: 12px; }
+.doc-item i.doc-icon { font-size: 24px; color: var(--primary); }
+.doc-info { display: flex; flex-direction: column; flex: 1; }
+.doc-name { font-weight: 500; color: var(--text-primary); }
+.doc-meta { font-size: 13px; color: var(--text-secondary); }
+.doc-actions-inline { display: flex; gap: 8px; margin-left: auto; }
+.action-btn { background: none; border: none; width: 36px; height: 36px; border-radius: 8px; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer; transition: all 0.2s; }
+.action-btn:hover { background-color: rgba(255,255,255,0.05); color: var(--text-primary); }
 
-.btn-back {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 15px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: color 0.2s;
-  width: 100%;
-  margin-bottom: -10px;
-}
+.badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.badge-valide { background-color: rgba(16,185,129,0.1); color: #10B981; }
+.badge-expire { background-color: rgba(239,68,68,0.1); color: var(--danger); }
 
-.btn-back:hover {
-  color: var(--text-primary);
-}
+.members-table { width: 100%; border-collapse: collapse; background-color: var(--bg-card); border-radius: 12px; overflow: hidden; }
+.members-table th, .members-table td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border-color); }
+.members-table th { color: var(--text-secondary); font-size: 13px; font-weight: 500; text-transform: uppercase; }
+.user-info { display: flex; align-items: center; gap: 12px; }
+.user-details { display: flex; flex-direction: column; }
+.user-name { color: var(--text-primary); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.user-email { color: var(--text-secondary); font-size: 13px; }
+.admin-badge { background-color: rgba(244,180,0,0.15); color: var(--primary); padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.pending-badge { background-color: rgba(156,163,175,0.15); color: #9CA3AF; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+.role-label { color: var(--text-secondary); font-size: 14px; }
+.permission-select { background-color: var(--bg-primary); border: 1px solid var(--input-border); color: var(--text-primary); padding: 8px 12px; border-radius: 6px; outline: none; }
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 18px; padding: 8px; border-radius: 8px; transition: background-color 0.2s; }
+.btn-icon.text-danger { color: var(--danger); }
+.btn-icon.text-danger:hover { background-color: rgba(239,68,68,0.1); }
 
-.depot-title-area {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
+.activites-list { display: flex; flex-direction: column; gap: 8px; }
+.activite-item { display: flex; align-items: flex-start; gap: 12px; background-color: var(--bg-card); padding: 16px; border-radius: 12px; }
+.activite-icon { width: 40px; height: 40px; background-color: var(--bg-primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.activite-content { display: flex; flex-direction: column; gap: 4px; }
+.activite-detail { color: var(--text-primary); font-size: 15px; }
+.activite-doc { color: var(--primary); font-size: 13px; }
+.activite-meta { color: var(--text-secondary); font-size: 12px; }
+.text-success { color: #10B981; }
+.text-primary { color: var(--primary); }
+.text-warning { color: #F59E0B; }
+.text-danger { color: var(--danger); }
+.text-secondary { color: var(--text-secondary); }
 
-.depot-title-area h1 {
-  font-size: 28px;
-  margin: 0 0 4px 0;
-}
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
+.modal-content { background-color: var(--bg-card); padding: 32px; border-radius: 18px; width: 100%; max-width: 450px; }
+.modal-content h2 { margin-top: 0; margin-bottom: 24px; }
+.form-group { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+.form-group label { color: #aaa; font-size: 14px; }
+.form-group input, .form-group select { background-color: var(--bg-primary); border: 1px solid var(--input-border); color: var(--text-primary); padding: 12px; border-radius: 8px; outline: none; }
+.form-group input:focus, .form-group select:focus { border-color: var(--primary); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 32px; }
+.btn-cancel { background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 10px 16px; }
+.btn-cancel:hover { color: var(--text-primary); }
 
-.tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 24px;
-}
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; text-align: center; color: var(--text-secondary); background-color: var(--bg-card); border-radius: 18px; }
+.empty-state i { font-size: 64px; color: var(--input-border); margin-bottom: 16px; }
+.empty-state h2 { color: var(--text-primary); margin-bottom: 8px; }
+.empty-state p { margin-bottom: 24px; }
 
-.tab {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  padding: 12px 24px;
-  font-size: 15px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s;
-}
-
-.tab:hover {
-  color: var(--text-primary);
-}
-
-.tab.active {
-  color: var(--primary);
-  border-bottom-color: var(--primary);
-}
-
-/* Contenu des onglets */
-.docs-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.doc-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background-color: var(--bg-card);
-  padding: 16px;
-  border-radius: 12px;
-}
-
-.doc-item i.doc-icon {
-  font-size: 24px;
-  color: var(--primary);
-}
-
-.doc-actions-inline {
-  display: flex;
-  gap: 8px;
-  margin-left: auto;
-}
-
-.action-btn {
-  background: none;
-  border: none;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.action-btn:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: var(--text-primary);
-}
-
-/* Table Membres */
-.members-table {
-  width: 100%;
-  border-collapse: collapse;
-  background-color: var(--bg-card);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.members-table th, .members-table td {
-  padding: 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.members-table th {
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  text-transform: uppercase;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.user-details {
-  display: flex;
-  flex-direction: column;
-}
-
-.user-name {
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.user-email {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.permission-select {
-  background-color: var(--bg-primary);
-  border: 1px solid var(--input-border);
-  color: var(--text-primary);
-  padding: 8px 12px;
-  border-radius: 6px;
-  outline: none;
-}
-
-.btn-icon {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 18px;
-  padding: 8px;
-  border-radius: 8px;
-  transition: background-color 0.2s;
-}
-
-.btn-icon.text-danger {
-  color: var(--danger);
-}
-
-.btn-icon.text-danger:hover {
-  background-color: rgba(239, 68, 68, 0.1);
-}
-
-/* Modals */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-}
-
-.modal-content {
-  background-color: var(--bg-card);
-  padding: 32px;
-  border-radius: 18px;
-  width: 100%;
-  max-width: 450px;
-}
-
-.modal-content h2 {
-  margin-top: 0;
-  margin-bottom: 24px;
-}
-
-.form-group {
-  margin-bottom: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  color: #aaa;
-  font-size: 14px;
-}
-
-.form-group input, .form-group select {
-  background-color: var(--bg-primary);
-  border: 1px solid var(--input-border);
-  color: var(--text-primary);
-  padding: 12px;
-  border-radius: 8px;
-  outline: none;
-}
-
-.form-group input:focus, .form-group select:focus {
-  border-color: var(--primary);
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 32px;
-}
-
-.btn-cancel {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 10px 16px;
-}
-
-.btn-cancel:hover {
-  color: var(--text-primary);
-}
-
-/* Empty State */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--text-secondary);
-  background-color: var(--bg-card);
-  border-radius: 18px;
-}
-
-.empty-state i {
-  font-size: 64px;
-  color: var(--input-border);
-  margin-bottom: 16px;
-}
-
-.empty-state h2 {
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.empty-state p {
-  margin-bottom: 24px;
-}
-
-.skeleton-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
-}
-
-.skeleton-card {
-  height: 200px;
-  background-color: var(--bg-card);
-  border-radius: 18px;
-  animation: pulse 1.5s infinite;
-}
-
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.5; }
-  100% { opacity: 1; }
-}
+.skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+.skeleton-card { height: 200px; background-color: var(--bg-card); border-radius: 18px; animation: pulse 1.5s infinite; }
+.skeleton-list { display: flex; flex-direction: column; gap: 8px; }
+.skeleton-item { height: 70px; background-color: var(--bg-card); border-radius: 12px; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 </style>

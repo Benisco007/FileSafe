@@ -34,8 +34,9 @@ onMounted(() => {
   fetchStats()
 })
 
+// Reçoit des octets bruts, affiche dans la bonne unité
 const formatBytes = (bytes, decimals = 2) => {
-  if (bytes === 0) return '0 Octets'
+  if (!bytes || bytes === 0) return '0 Octets'
   const k = 1024
   const dm = decimals < 0 ? 0 : decimals
   const sizes = ['Octets', 'Ko', 'Mo', 'Go', 'To']
@@ -84,7 +85,7 @@ const formatBytes = (bytes, decimals = 2) => {
           <div class="metric-icon warning"><i class="ti ti-alert-triangle"></i></div>
           <div class="metric-info">
             <span class="metric-label">Documents Expirés</span>
-            <span class="metric-value">{{ stats.documents_expires }}</span>
+            <span class="metric-value">{{ stats.document_expires }}</span>
           </div>
         </div>
 
@@ -111,12 +112,12 @@ const formatBytes = (bytes, decimals = 2) => {
                     a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
                 <path class="circle"
-                  :stroke-dasharray="`${stats.score_documentaire}, 100`"
+                  :stroke-dasharray="`${stats.score}, 100`"
                   d="M18 2.0845
                     a 15.9155 15.9155 0 0 1 0 31.831
                     a 15.9155 15.9155 0 0 1 0 -31.831"
                 />
-                <text x="18" y="20.35" class="percentage">{{ stats.score_documentaire }}%</text>
+                <text x="18" y="20.35" class="percentage">{{ stats.score }}%</text>
               </svg>
             </div>
             <p class="score-text">Documents critiques à jour</p>
@@ -164,8 +165,8 @@ const formatBytes = (bytes, decimals = 2) => {
       </div>
     </template>
 
-    <UploadModal 
-      :isOpen="isUploadModalOpen" 
+    <UploadModal
+      :isOpen="isUploadModalOpen"
       @close="isUploadModalOpen = false"
       @uploaded="fetchStats"
     />

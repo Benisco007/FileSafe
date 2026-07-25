@@ -4,7 +4,6 @@ import { useRoute } from 'vue-router'
 import axios from 'axios'
 import PreviewModal from '../components/documents/PreviewModal.vue'
 
-// Instance axios sans token JWT — accès public
 const publicApi = axios.create({
   baseURL: 'http://localhost:8000',
 })
@@ -38,7 +37,7 @@ const fetchShareData = async () => {
     } else if (!err.response) {
       errorMsg.value = "Impossible de contacter le serveur. Vérifiez que le backend est bien démarré."
     } else {
-      errorMsg.value = ""
+      errorMsg.value = `Erreur ${err.response.status} : ${err.response.data?.detail || 'Accès refusé.'}`
     }
   } finally {
     isLoading.value = false
@@ -94,7 +93,7 @@ const handlePreview = async () => {
     previewMime.value = type
     isPreviewModalOpen.value = true
   } catch (err) {
-    console.error('Erreur lors du chargement de l\'aperçu:', err)
+    console.error("Erreur lors du chargement de l'aperçu:", err)
     alert("Impossible de charger l'aperçu du document.")
   } finally {
     isLoadingPreview.value = false
@@ -155,10 +154,19 @@ const formatDate = (dateString) => {
             <span class="detail-label">Date d'ajout</span>
             <span class="detail-value">{{ formatDate(documentData.date_ajout) }}</span>
           </div>
+          <div class="detail-item" v-if="!documentData.peut_telecharger">
+            <span class="readonly-badge">
+              <i class="ti ti-eye"></i> Lecture seule — téléchargement non autorisé
+            </span>
+          </div>
         </div>
 
         <div class="doc-actions">
-          <button class="btn-primary" @click="handleDownload">
+          <button
+            v-if="documentData.peut_telecharger"
+            class="btn-primary"
+            @click="handleDownload"
+          >
             <i class="ti ti-download"></i>
             Télécharger le document
           </button>
@@ -171,7 +179,6 @@ const formatDate = (dateString) => {
       </div>
     </div>
     
-    <!-- Modale de prévisualisation -->
     <PreviewModal 
       :isOpen="isPreviewModalOpen"
       :fileUrl="previewUrl"
@@ -339,6 +346,18 @@ const formatDate = (dateString) => {
   color: var(--text-secondary);
   font-size: 13px;
   margin-left: 6px;
+}
+
+.readonly-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--danger);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .doc-actions {

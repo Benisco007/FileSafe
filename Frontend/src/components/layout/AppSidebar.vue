@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 
@@ -6,12 +7,17 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-const navItems = [
+const isAdmin = authStore.user?.role === 'admin'
+
+const navItems = isAdmin ? [
+  { label: 'Administration', icon: 'ti-shield', route: '/admin' }
+] : [
   { label: 'Accueil', icon: 'ti-home', route: '/' },
   { label: 'Mes documents', icon: 'ti-files', route: '/documents' },
   { label: 'Dépôts partagés', icon: 'ti-users', route: '/depots' },
   { label: 'Partages', icon: 'ti-share', route: '/shares' },
-  { label: 'Hors ligne', icon: 'ti-wifi-off', route: '/offline' }
+  { label: 'Hors ligne', icon: 'ti-wifi-off', route: '/offline' },
+  { label: 'Assistant IA', icon: 'ti-sparkles', route: '/ai' },
 ]
 
 const isActive = (itemRoute) => route.path === itemRoute
@@ -50,11 +56,9 @@ const handleLogout = () => {
     <!-- SÉPARATEUR -->
     <div class="separator"></div>
 
-    
-    
     <!-- BAS DE SIDEBAR -->
     <div class="sidebar-bottom">
-      <div class="nav-item" @click="navigate('/settings')">
+      <div class="nav-item" @click="navigate('/settings')" v-if="!isAdmin">
         <i class="ti ti-settings"></i>
         <span>Paramètres</span>
       </div>
@@ -69,18 +73,14 @@ const handleLogout = () => {
 </template>
 
 <style scoped>
-/* ============================================
-   TAILLES — modifie uniquement ici
-   ============================================ */
 .sidebar {
-  --font-logo:    22px;   /* Nom "Filsafe"         */
-  --font-nav:     18px;   /* Items de navigation     */
-  --font-badge:   18px;   /* Badge "3"               */
-  --font-user:    20px;   /* Nom utilisateur bas      */
-  --icon-nav:     20px;   /* Taille icônes navigation */
-  --icon-logo:    20px;   /* Taille icône logo        */
+  --font-logo:    22px;
+  --font-nav:     18px;
+  --font-badge:   18px;
+  --font-user:    20px;
+  --icon-nav:     20px;
+  --icon-logo:    20px;
 }
-/* ============================================ */
 
 .sidebar {
   width: 220px;
@@ -117,7 +117,6 @@ const handleLogout = () => {
   color: var(--text-primary);
 }
 
-/* NAVIGATION */
 .nav-main {
   display: flex;
   flex-direction: column;
@@ -149,7 +148,6 @@ const handleLogout = () => {
   flex-shrink: 0;
 }
 
-/* BADGE */
 .badge {
   margin-left: auto;
   background: var(--primary);
@@ -160,21 +158,18 @@ const handleLogout = () => {
   border-radius: 20px;
 }
 
-/* SÉPARATEUR */
 .separator {
   height: 0.5px;
   background: var(--border-color);
   margin: 16px 0;
 }
 
-/* NAVIGATION SECONDAIRE */
 .nav-secondary {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-/* BAS DE SIDEBAR */
 .sidebar-bottom {
   margin-top: auto;
   display: flex;

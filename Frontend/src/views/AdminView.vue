@@ -9,21 +9,18 @@ const activeFilter = ref('Tous')
 const currentPage = ref(1)
 const itemsPerPage = 10
 
-const filters = ['Tous', 'Actifs', 'Bloqués']
+const filters = ['Tous', 'Actifs', 'Suspendus']
 
-const stats = computed(() => {
-  return {
-    total: users.value.length,
-    actifs: users.value.filter(u => !u.is_blocked).length,
-    bloques: users.value.filter(u => u.is_blocked).length,
-    admins: users.value.filter(u => u.role === 'admin').length
-  }
-})
+const stats = computed(() => ({
+  total: users.value.length,
+  actifs: users.value.filter(u => u.est_actif).length,
+  suspendus: users.value.filter(u => !u.est_actif).length,
+}))
 
 const fetchUsers = async () => {
   try {
     isLoading.value = true
-    const { data } = await api.get('/api/admin/utilisateurs')
+    const { data } = await api.get('/api/admin/users')
     users.value = data
   } catch (err) {
     console.error('Erreur lors de la récupération des utilisateurs', err)
@@ -32,17 +29,24 @@ const fetchUsers = async () => {
   }
 }
 
-onMounted(() => {
-  fetchUsers()
-})
+onMounted(() => fetchUsers())
 
-const toggleBlockUser = async (user) => {
+const toggleSuspendre = async (user) => {
   try {
-    const action = user.is_blocked ? 'debloquer' : 'bloquer'
-    await api.patch(`/api/admin/utilisateurs/${user.id_user}/${action}`)
-    user.is_blocked = !user.is_blocked
+    const { data } = await api.patch(`/api/admin/users/${user.id_user}/suspendre`)
+    user.est_actif = data.est_actif
   } catch (err) {
-    console.error(`Erreur lors de l'action sur l'utilisateur`, err)
+    console.error('Erreur lors de la suspension', err)
+  }
+}
+
+const supprimerUser = async (user) => {
+  if (!confirm(`Supprimer définitivement ${user.prenom} ${user.nom} ? Cette action est irréversible.`)) return
+  try {
+    await api.delete(`/api/admin/users/${user.id_user}`)
+    users.value = users.value.filter(u => u.id_user !== user.id_user)
+  } catch (err) {
+    console.error('Erreur lors de la suppression', err)
   }
 }
 
@@ -50,17 +54,17 @@ const filteredUsers = computed(() => {
   let result = users.value
 
   if (activeFilter.value === 'Actifs') {
-    result = result.filter(u => !u.is_blocked)
-  } else if (activeFilter.value === 'Bloqués') {
-    result = result.filter(u => u.is_blocked)
+    result = result.filter(u => u.est_actif)
+  } else if (activeFilter.value === 'Suspendus') {
+    result = result.filter(u => !u.est_actif)
   }
 
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    result = result.filter(u => 
+    result = result.filter(u =>
       (u.nom && u.nom.toLowerCase().includes(query)) ||
       (u.prenom && u.prenom.toLowerCase().includes(query)) ||
-      (u.email && u.email.toLowerCase().includes(query))
+      (u.mail && u.mail.toLowerCase().includes(query))
     )
   }
 
@@ -71,14 +75,11 @@ const totalPages = computed(() => Math.ceil(filteredUsers.value.length / itemsPe
 
 const paginatedUsers = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage
-  const end = start + itemsPerPage
-  return filteredUsers.value.slice(start, end)
+  return filteredUsers.value.slice(start, start + itemsPerPage)
 })
 
 const goToPage = (page) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
-  }
+  if (page >= 1 && page <= totalPages.value) currentPage.value = page
 }
 </script>
 
@@ -91,31 +92,30 @@ const goToPage = (page) => {
     <!-- Stats Rapides -->
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-icon"><i class="ti ti-users"></i></div>
+        <div class="stat-icon">
+          <i class="ti ti-users"></i>
+        </div>
         <div class="stat-info">
           <span class="stat-label">Total Utilisateurs</span>
           <span class="stat-value">{{ stats.total }}</span>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon text-success"><i class="ti ti-user-check"></i></div>
+        <div class="stat-icon text-success">
+          <i class="ti ti-user-check"></i>
+        </div>
         <div class="stat-info">
           <span class="stat-label">Utilisateurs Actifs</span>
           <span class="stat-value">{{ stats.actifs }}</span>
         </div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon text-danger"><i class="ti ti-user-x"></i></div>
-        <div class="stat-info">
-          <span class="stat-label">Comptes Bloqués</span>
-          <span class="stat-value">{{ stats.bloques }}</span>
+        <div class="stat-icon text-danger">
+          <i class="ti ti-user-x"></i>
         </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon text-primary"><i class="ti ti-shield-check"></i></div>
         <div class="stat-info">
-          <span class="stat-label">Administrateurs</span>
-          <span class="stat-value">{{ stats.admins }}</span>
+          <span class="stat-label">Comptes Suspendus</span>
+          <span class="stat-value">{{ stats.suspendus }}</span>
         </div>
       </div>
     </div>
@@ -127,8 +127,8 @@ const goToPage = (page) => {
         <input type="text" v-model="searchQuery" placeholder="Rechercher par nom ou email...">
       </div>
       <div class="pills-container">
-        <button 
-          v-for="filter in filters" 
+        <button
+          v-for="filter in filters"
           :key="filter"
           :class="['pill', { active: activeFilter === filter }]"
           @click="activeFilter = filter; currentPage = 1"
@@ -166,30 +166,38 @@ const goToPage = (page) => {
                 <div class="user-avatar">{{ user.prenom?.charAt(0) || 'U' }}</div>
                 <div class="user-details">
                   <span class="user-name">{{ user.prenom }} {{ user.nom }}</span>
-                  <span class="user-email">{{ user.email }}</span>
+                  <span class="user-email">{{ user.mail }}</span>
                 </div>
               </div>
             </td>
             <td>
               <span class="role-badge" :class="user.role === 'admin' ? 'admin' : 'user'">
-                {{ user.role || 'user' }}
+                {{ user.role || 'utilisateur' }}
               </span>
             </td>
             <td>
-              <span class="status-badge" :class="user.is_blocked ? 'blocked' : 'active'">
-                {{ user.is_blocked ? 'Bloqué' : 'Actif' }}
+              <span class="status-badge" :class="user.est_actif ? 'active' : 'blocked'">
+                {{ user.est_actif ? 'Actif' : 'Suspendu' }}
               </span>
             </td>
             <td>
-              <button 
-                class="btn-action" 
-                :class="user.is_blocked ? 'btn-success' : 'btn-danger'"
-                @click="toggleBlockUser(user)"
-                :disabled="user.role === 'admin'"
-              >
-                <i :class="user.is_blocked ? 'ti ti-user-check' : 'ti ti-user-x'"></i>
-                {{ user.is_blocked ? 'Débloquer' : 'Bloquer' }}
-              </button>
+              <div class="actions-cell">
+                <button
+                  class="btn-action"
+                  :class="user.est_actif ? 'btn-danger' : 'btn-success'"
+                  @click="toggleSuspendre(user)"
+                >
+                  <i :class="user.est_actif ? 'ti ti-user-x' : 'ti ti-user-check'"></i>
+                  {{ user.est_actif ? 'Suspendre' : 'Réactiver' }}
+                </button>
+                <button
+                  class="btn-action btn-delete"
+                  @click="supprimerUser(user)"
+                >
+                  <i class="ti ti-trash"></i>
+                  Supprimer
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -197,17 +205,17 @@ const goToPage = (page) => {
 
       <!-- Pagination -->
       <div class="pagination" v-if="totalPages > 1">
-        <button 
-          class="page-btn" 
-          :disabled="currentPage === 1" 
+        <button
+          class="page-btn"
+          :disabled="currentPage === 1"
           @click="goToPage(currentPage - 1)"
         >
           <i class="ti ti-chevron-left"></i>
         </button>
         <span class="page-info">Page {{ currentPage }} sur {{ totalPages }}</span>
-        <button 
-          class="page-btn" 
-          :disabled="currentPage === totalPages" 
+        <button
+          class="page-btn"
+          :disabled="currentPage === totalPages"
           @click="goToPage(currentPage + 1)"
         >
           <i class="ti ti-chevron-right"></i>
@@ -230,7 +238,6 @@ const goToPage = (page) => {
   color: var(--text-primary);
 }
 
-/* Stats */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -259,7 +266,6 @@ const goToPage = (page) => {
 
 .text-success { color: var(--success); background-color: rgba(34, 197, 94, 0.1); }
 .text-danger { color: var(--danger); background-color: rgba(239, 68, 68, 0.1); }
-.text-primary { color: var(--primary); background-color: rgba(244, 180, 0, 0.1); }
 
 .stat-info {
   display: flex;
@@ -277,7 +283,6 @@ const goToPage = (page) => {
   color: var(--text-primary);
 }
 
-/* Contrôles */
 .controls-bar {
   display: flex;
   flex-direction: column;
@@ -354,7 +359,6 @@ const goToPage = (page) => {
   color: var(--primary);
 }
 
-/* Tableau */
 .table-container {
   background-color: var(--bg-card);
   border-radius: 12px;
@@ -366,7 +370,8 @@ const goToPage = (page) => {
   border-collapse: collapse;
 }
 
-.users-table th, .users-table td {
+.users-table th,
+.users-table td {
   padding: 16px 20px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
@@ -396,6 +401,7 @@ const goToPage = (page) => {
   justify-content: center;
   font-size: 16px;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 .user-details {
@@ -448,6 +454,12 @@ const goToPage = (page) => {
   color: var(--danger);
 }
 
+.actions-cell {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .btn-action {
   display: flex;
   align-items: center;
@@ -484,7 +496,16 @@ const goToPage = (page) => {
   background-color: rgba(34, 197, 94, 0.2);
 }
 
-/* Pagination */
+.btn-delete {
+  background-color: rgba(239, 68, 68, 0.05);
+  color: var(--danger);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-delete:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
 .pagination {
   display: flex;
   justify-content: center;

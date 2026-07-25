@@ -16,7 +16,11 @@ const isDarkMode = ref(true)
 
 onMounted(() => {
   if (localStorage.getItem('token')) {
-    router.push('/')
+    if (authStore.user?.role === 'admin') {
+      router.push('/admin')
+    } else {
+      router.push('/')
+    }
   }
   isDarkMode.value = localStorage.getItem('theme') !== 'light'
 })
@@ -52,7 +56,11 @@ const handleLogin = async () => {
     } else {
       localStorage.setItem('token', data.access_token)
       authStore.setAuth(data.access_token, data.user)
-      router.push('/')
+      if (data.user?.role === 'admin') {
+        router.push('/admin')
+      } else {
+        router.push('/')
+      }
     }
   } catch (err) {
     console.error('Erreur login complète:', err)

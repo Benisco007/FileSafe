@@ -21,6 +21,7 @@ FileSafe est une application web de gestion sécurisée de documents personnels.
 ## 🛠 Technologies utilisées
 
 **Backend**
+
 - Python 3.10+
 - FastAPI
 - SQLAlchemy (ORM)
@@ -29,6 +30,7 @@ FileSafe est une application web de gestion sécurisée de documents personnels.
 - Google Gemini API (IA)
 
 **Frontend**
+
 - Vue 3 (Composition API)
 - Vite
 - Pinia (state management)
@@ -161,17 +163,21 @@ FileSafe/
 
 ---
 
-## 🔑 Obtenir une clé API Gemini
+## 🔑 Obtenir une clé API Groq
 
-1. Rendez-vous sur [Google AI Studio](https://aistudio.google.com)
-2. Connectez-vous avec votre compte Google
-3. Cliquez sur **Get API Key**
-4. Copiez la clé et ajoutez-la dans votre `.env` sous `GEMINI_API_KEY`
+1. Rendez-vous sur [Groq Console](https://console.groq.com)
+2. Connectez-vous ou créez un compte
+3. Cliquez sur **API Keys** puis **Create API Key**
+4. Copiez la clé et ajoutez-la dans votre `.env` sous `GROQ_API_KEY`
 
 ---
 
-## 👨‍💻 Auteur
+## 👨‍💻 Auteurs
 
-**Emmanuel Béni HOUNTONDJI**  
-Étudiant en Licence 2 Informatique de Gestion — ENEAM, Université d'Abomey-Calavi  
+**Emmanuel Béni HOUNTONDJI**
+Étudiant en Licence 2 Informatique de Gestion — ENEAM, Université d'Abomey-Calavi
+Stage académique chez SolDigit · Juillet 2026
+
+**ALOGNISSOU Astrid**
+Étudiante en Licence 2 Informatique de Gestion — ENEAM, Université d'Abomey-Calavi
 Stage académique chez SolDigit · Juillet 2026

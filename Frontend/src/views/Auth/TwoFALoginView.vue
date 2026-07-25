@@ -38,7 +38,11 @@ const verify = async () => {
     localStorage.removeItem('pending_2fa_email')
     localStorage.setItem('token', data.access_token)
     authStore.setAuth(data.access_token, data.user)
-    router.push('/')
+    if (data.user?.role === 'admin') {
+      router.push('/admin')
+    } else {
+      router.push('/')
+    }
   } catch (err) {
     error.value = err.response?.data?.detail || 'Code invalide.'
   } finally {
