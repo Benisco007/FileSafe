@@ -3,7 +3,7 @@ import router from './router'
 import { useAuthStore } from './stores/auth'
 
 const api = axios.create({
-  baseURL: 'https://filesafe.onrender.com',
+  baseURL: import.meta.env.VITE_API_URL || 'https://filesafe.onrender.com',
   headers: {
     'Content-Type': 'application/json'
   }
