@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     MAIL_PORT: int
     MAIL_FROM: str
     GROQ_API_KEY: str
-
+    BREVO_API_KEY: str
     
     class Config:
         env_file=".env"
