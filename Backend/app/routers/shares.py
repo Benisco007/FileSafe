@@ -145,7 +145,7 @@ def acceder_document(
         "peut_telecharger": partage.peut_telecharger,
         "expediteur_nom": f"{expediteur.prenom} {expediteur.nom}" if expediteur else "Utilisateur inconnu",
         "expediteur_email": expediteur.mail if expediteur else "",
-        "lien_telechargement": f"http://localhost:8000/api/shares/telecharger/{token}"
+        "lien_telechargement": f"https://filesafe.onrender.com/api/shares/telecharger/{token}"
     }
 
 

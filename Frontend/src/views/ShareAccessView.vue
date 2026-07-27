@@ -5,7 +5,7 @@ import axios from 'axios'
 import PreviewModal from '../components/documents/PreviewModal.vue'
 
 const publicApi = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: 'https://filesafe.onrender.com',
 })
 
 const route = useRoute()
