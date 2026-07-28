@@ -3,12 +3,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from supabase import create_client
 import os
 import uuid
-import shutil
 import asyncio
-import cloudinary
-import cloudinary.uploader
 
 
 from app.core.database import get_db
@@ -17,11 +15,8 @@ from app.models.user import User
 from app.models.document import Document
 from app.core.config import settings
 
-cloudinary.config(
-    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-    api_key=settings.CLOUDINARY_API_KEY,
-    api_secret=settings.CLOUDINARY_API_SECRET
-)
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY) 
+
 router = APIRouter()
 
 GEMINI_TYPES = {
@@ -128,20 +123,17 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="Fichier trop volumineux. Maximum 10 Mo.")
 
     # Upload vers Cloudinary
-    import io
-    import base64
-
-    contenu_base64 = base64.b64encode(contenu).decode('utf-8')
-    data_uri = f"data:{file.content_type};base64,{contenu_base64}"
-
-    resultat = cloudinary.uploader.upload(
-        data_uri,
-        resource_type="auto",
-        folder="filesafe",
-        public_id=f"{uuid.uuid4()}",
-        use_filename=False
-    )
-    url_cloudinary = resultat["secure_url"]
+    try:
+        import io
+        nom_fichier = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+        supabase.storage.from_("filesafe").upload(
+            path=nom_fichier,
+            file=contenu,
+            file_options={"content-type": file.content_type}
+        )
+        url_supabase = f"{settings.SUPABASE_URL}/storage/v1/object/public/filesafe/{nom_fichier}"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur upload Supabase : {str(e)}")
 
     date_expiration = None
     if date_exp:
@@ -155,7 +147,7 @@ async def upload_document(
         type_doc=file.content_type,
         taille_doc=taille,
         categorie=categorie,
-        chemin_fichier=url_cloudinary,  # ← URL Cloudinary au lieu du chemin local
+        chemin_fichier=url_supabase,
         autorisation_ia=autorisation_ia,
         date_exp=date_expiration,
         id_user=current_user.id_user
@@ -166,7 +158,7 @@ async def upload_document(
     db.refresh(nouveau_doc)
 
     if autorisation_ia and not date_expiration:
-        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, url_cloudinary, file.content_type, db))
+        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, url_supabase, file.content_type, db))
 
     return {
         "message": "Document téléversé avec succès.",
@@ -279,18 +271,16 @@ def supprimer_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé.")
 
-    # Supprimer de Cloudinary
     try:
-        public_id = doc.chemin_fichier.split("/filesafe/")[-1].split(".")[0]
-        cloudinary.uploader.destroy(f"filesafe/{public_id}", resource_type="raw")
+        nom_fichier = doc.chemin_fichier.split("/filesafe/")[-1]
+        supabase.storage.from_("filesafe").remove([nom_fichier])
     except Exception as e:
-        print(f"Erreur suppression Cloudinary: {e}")
+        print(f"Erreur suppression Supabase: {e}")
 
     db.delete(doc)
     db.commit()
 
     return {"message": "Document supprimé avec succès."}
-
 # ── MARQUER COMME CRITIQUE (HORS LIGNE) ─────────────────────────────────────
 @router.patch("/{id_doc}/marquer-critique", status_code=200)
 def marquer_critique(
