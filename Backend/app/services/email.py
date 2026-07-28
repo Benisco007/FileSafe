@@ -48,11 +48,11 @@ Gardez ce mot de passe confidentiel.
 """
     corps += "\nL'équipe FileSafe"
 
-    message = MessageSchema(
+    api_instance = get_api_instance()
+    email = sib_api_v3_sdk.SendSmtpEmail(
+        to=[{"email": mail}],
+        sender={"email": settings.MAIL_FROM, "name": "FileSafe"},
         subject=f"{nom_expediteur} a partagé un document avec vous",
-        recipients=[mail],
-        body=corps,
-        subtype="plain"
+        text_content=corps
     )
-    fm = FastMail(conf)
-    await fm.send_message(message)
+    api_instance.send_transac_email(email)
