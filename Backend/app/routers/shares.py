@@ -178,13 +178,15 @@ def acceder_document(
 
 # ── TÉLÉCHARGER VIA LIEN ─────────────────────────────────────────────────────
 @router.get("/telecharger/{token}", status_code=200)
-def telecharger_via_lien(
+async def telecharger_via_lien(
     token: str,
     request: Request,
     inline: bool = Query(False),
     db: Session = Depends(get_db)
 ):
-    from fastapi.responses import RedirectResponse
+    import httpx
+    from fastapi.responses import StreamingResponse
+    import io
 
     partage = db.query(Share).filter(Share.token == token).first()
 
@@ -211,7 +213,19 @@ def telecharger_via_lien(
     db.commit()
 
     doc = partage.document
-    return RedirectResponse(url=doc.chemin_fichier)
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(doc.chemin_fichier)
+
+    disp = "inline" if inline else "attachment"
+
+    return StreamingResponse(
+        io.BytesIO(response.content),
+        media_type=doc.type_doc,
+        headers={
+            "Content-Disposition": f'{disp}; filename="{doc.nom_doc}"'
+        }
+    )
 
 # ── RÉVOQUER UN LIEN ─────────────────────────────────────────────────────────
 @router.patch("/{id_part}/revoquer", status_code=200)

@@ -33,11 +33,6 @@ async def analyser_date_expiration(id_doc, chemin_fichier: str, type_doc: str, d
         from groq import Groq
         from app.core.config import settings
 
-        cloudinary.config(
-            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
-            api_key=settings.CLOUDINARY_API_KEY,
-            api_secret=settings.CLOUDINARY_API_SECRET
-        )
 
         if type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
             return
@@ -238,13 +233,15 @@ def consulter_document(
 
 # ── TÉLÉCHARGER ──────────────────────────────────────────────────────────────
 @router.get("/{id_doc}/telecharger", status_code=200)
-def telecharger_document(
+async def telecharger_document(
     id_doc: str,
     inline: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    from fastapi.responses import RedirectResponse
+    import httpx
+    from fastapi.responses import StreamingResponse
+    import io
 
     doc = db.query(Document).filter(
         Document.id_doc == id_doc,
@@ -254,7 +251,18 @@ def telecharger_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé.")
 
-    return RedirectResponse(url=doc.chemin_fichier)
+    async with httpx.AsyncClient() as client:
+        response = await client.get(doc.chemin_fichier)
+
+    disp = "inline" if inline else "attachment"
+
+    return StreamingResponse(
+        io.BytesIO(response.content),
+        media_type=doc.type_doc,
+        headers={
+            "Content-Disposition": f'{disp}; filename="{doc.nom_doc}"'
+        }
+    )
 
 # ── SUPPRIMER ────────────────────────────────────────────────────────────────
 @router.delete("/{id_doc}", status_code=200)
