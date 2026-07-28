@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../../api'
 
+const motDePasse = ref('')
 const props = defineProps({
   document: {
     type: Object,
@@ -63,6 +64,7 @@ const handleGenerateLink = async () => {
     isGenerating.value = true
     let url = `/api/shares/${docId}/partager?duree_heures=${dureeHeures}&peut_telecharger=${peutTelecharger.value}`
     if (destinataire.value) url += `&email_destinataire=${encodeURIComponent(destinataire.value.trim())}`
+    if (motDePasse.value) url += `&mot_de_passe=${encodeURIComponent(motDePasse.value.trim())}`
 
     const { data } = await api.post(url, {})
 
@@ -132,6 +134,18 @@ const formatDate = (dateString) => {
             <label>Destinataire (optionnel)</label>
             <input type="text" v-model="destinataire" placeholder="Email du destinataire">
           </div>
+          <div class="form-group" v-if="destinataire">
+            <label>Mot de passe (optionnel)</label>
+              <input 
+                type="text" 
+                v-model="motDePasse" 
+                placeholder="Laisser vide pour générer automatiquement"
+              >
+              <p class="hint-text">
+                <i class="ti ti-info-circle"></i>
+                Si vide, un code à 6 chiffres sera généré et envoyé au destinataire.
+              </p>
+            </div>
           
           <div class="form-group">
             <label>Durée du lien</label>
@@ -181,7 +195,14 @@ const formatDate = (dateString) => {
           <i class="ti ti-check"></i>
           <h2>Lien généré avec succès</h2>
         </div>
-        
+        <div class="share-details">
+            <p>Expire le : <strong>{{ formatDate(shareDetails?.expire_le) }}</strong></p>
+            <p>Téléchargement : <strong>{{ peutTelecharger ? 'Autorisé' : 'Lecture seule' }}</strong></p>
+            <p v-if="shareDetails?.mot_de_passe">
+              Mot de passe : <strong>{{ shareDetails.mot_de_passe }}</strong>
+              <span class="hint-text">(envoyé au destinataire par email)</span>
+            </p>
+        </div>
         <div class="modal-body text-center">
           <label class="link-label">Lien d'accès au document</label>
           <div class="link-box">
