@@ -18,6 +18,7 @@ class Share(Base):
     peut_telecharger = Column(Boolean, default=True)
     est_actif = Column(Boolean, default=True)
     date_creation = Column(DateTime, default=datetime.utcnow)
+    email_destinataire = Column(String(255), nullable=True)
 
     document = relationship("Document", back_populates="partages")
     journal_acces = relationship("JournalAcces", back_populates="partage", cascade="all, delete-orphan")

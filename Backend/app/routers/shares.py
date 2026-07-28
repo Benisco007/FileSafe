@@ -42,7 +42,8 @@ async def partager_document(
         id_doc=doc.id_doc,
         token=token,
         date_exp=date_exp,
-        peut_telecharger=peut_telecharger
+        peut_telecharger=peut_telecharger,
+        email_destinataire=email_destinataire
     )
 
     db.add(partage)
@@ -56,8 +57,8 @@ async def partager_document(
         if destinataire_user:
             nouvelle_notif = Notification(
                 id_user=destinataire_user.id_user,
-                titre="Nouvel accès",
-                description=f"{current_user.prenom} {current_user.nom} a partagé le document '{doc.nom_doc}' avec vous.",
+                titre="Document partagé avec vous",
+                description=f"{current_user.prenom} {current_user.nom} a partagé '{doc.nom_doc}' avec vous. Lien : {lien_frontend}",
                 type_notif="Accès extérieurs"
             )
             db.add(nouvelle_notif)
@@ -112,6 +113,7 @@ def mes_partages(
 def acceder_document(
     token: str,
     request: Request,
+    email: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     partage = db.query(Share).filter(Share.token == token).first()
@@ -124,6 +126,13 @@ def acceder_document(
 
     if partage.date_exp and datetime.utcnow() > partage.date_exp:
         raise HTTPException(status_code=403, detail="Ce lien a expiré.")
+
+    # Vérification email si partage privé
+    if partage.email_destinataire:
+        if not email:
+            raise HTTPException(status_code=403, detail="PRIVATE")
+        if email.lower() != partage.email_destinataire.lower():
+            raise HTTPException(status_code=403, detail="Accès refusé. Ce lien est réservé à une autre adresse email.")
 
     journal = JournalAcces(
         id_part=partage.id_part,
