@@ -128,18 +128,20 @@ async def upload_document(
         raise HTTPException(status_code=400, detail="Fichier trop volumineux. Maximum 10 Mo.")
 
     # Upload vers Cloudinary
-    try:
-        import io
-        resultat = cloudinary.uploader.upload(
-            io.BytesIO(contenu),
-            resource_type="auto",
-            folder="filesafe",
-            public_id=f"{uuid.uuid4()}",
-            use_filename=False
-        )
-        url_cloudinary = resultat["secure_url"]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur upload Cloudinary : {str(e)}")
+    import io
+    import base64
+
+    contenu_base64 = base64.b64encode(contenu).decode('utf-8')
+    data_uri = f"data:{file.content_type};base64,{contenu_base64}"
+
+    resultat = cloudinary.uploader.upload(
+        data_uri,
+        resource_type="auto",
+        folder="filesafe",
+        public_id=f"{uuid.uuid4()}",
+        use_filename=False
+    )
+    url_cloudinary = resultat["secure_url"]
 
     date_expiration = None
     if date_exp:
