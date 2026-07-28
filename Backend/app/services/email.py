@@ -28,21 +28,31 @@ L'équipe FileSafe
     )
     api_instance.send_transac_email(email)
 
-async def send_share_email(mail: str, lien_partage: str, nom_expediteur: str, nom_document: str):
-    api_instance = get_api_instance()
-    email = sib_api_v3_sdk.SendSmtpEmail(
-        to=[{"email": mail}],
-        sender={"email": settings.MAIL_FROM, "name": "FileSafe"},
-        subject=f"{nom_expediteur} a partagé un document avec vous",
-        text_content=f"""
+
+
+async def send_share_email(mail: str, lien_partage: str, nom_expediteur: str, nom_document: str, mot_de_passe: str = None):
+    corps = f"""
 Bonjour,
 
 {nom_expediteur} vient de partager le document "{nom_document}" avec vous via FileSafe.
 
 Vous pouvez y accéder en cliquant sur le lien ci-dessous :
 {lien_partage}
+"""
+    if mot_de_passe:
+        corps += f"""
+Ce document est protégé par un mot de passe.
+Votre mot de passe d'accès : {mot_de_passe}
 
-L'équipe FileSafe
-        """
+Gardez ce mot de passe confidentiel.
+"""
+    corps += "\nL'équipe FileSafe"
+
+    message = MessageSchema(
+        subject=f"{nom_expediteur} a partagé un document avec vous",
+        recipients=[mail],
+        body=corps,
+        subtype="plain"
     )
-    api_instance.send_transac_email(email)
+    fm = FastMail(conf)
+    await fm.send_message(message)

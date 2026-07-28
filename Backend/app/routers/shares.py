@@ -24,6 +24,7 @@ async def partager_document(
     email_destinataire: Optional[str] = None,
     duree_heures: Optional[int] = 24,
     peut_telecharger: bool = True,
+    mot_de_passe: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -38,12 +39,21 @@ async def partager_document(
     token = secrets.token_urlsafe(32)
     date_exp = datetime.utcnow() + timedelta(hours=duree_heures)
 
+    # Générer mot de passe si email renseigné et pas de mot de passe fourni
+    mdp_clair = None
+    mdp_hache = None
+    if email_destinataire:
+        import random, string
+        from app.core.security import hash_password
+        mdp_clair = mot_de_passe if mot_de_passe else ''.join(random.choices(string.digits, k=6))
+        mdp_hache = hash_password(mdp_clair)
+
     partage = Share(
         id_doc=doc.id_doc,
         token=token,
         date_exp=date_exp,
         peut_telecharger=peut_telecharger,
-        email_destinataire=email_destinataire
+        pswd_hache=mdp_hache
     )
 
     db.add(partage)
@@ -58,15 +68,22 @@ async def partager_document(
             nouvelle_notif = Notification(
                 id_user=destinataire_user.id_user,
                 titre="Document partagé avec vous",
-                description=f"{current_user.prenom} {current_user.nom} a partagé '{doc.nom_doc}' avec vous. Lien : {lien_frontend}",
-                type_notif="Accès extérieurs"
+                description=f"{current_user.prenom} {current_user.nom} a partagé '{doc.nom_doc}' avec vous.",
+                type_notif="Accès extérieurs",
+                data=f"{lien_frontend}|{mdp_clair}"
             )
             db.add(nouvelle_notif)
             db.commit()
 
         nom_expediteur = f"{current_user.prenom} {current_user.nom}"
         try:
-            await send_share_email(email_destinataire, lien_frontend, nom_expediteur, doc.nom_doc)
+            await send_share_email(
+                email_destinataire,
+                lien_frontend,
+                nom_expediteur,
+                doc.nom_doc,
+                mdp_clair
+            )
         except Exception as e:
             print(f"Erreur envoi email: {e}")
 
@@ -74,9 +91,9 @@ async def partager_document(
         "message": "Lien de partage créé.",
         "lien": lien_frontend,
         "expire_le": partage.date_exp,
-        "peut_telecharger": partage.peut_telecharger
+        "peut_telecharger": partage.peut_telecharger,
+        "mot_de_passe": mdp_clair
     }
-
 
 # ── LISTE DES PARTAGES DE L'UTILISATEUR ──────────────────────────────────────
 @router.get("/mes-partages", status_code=200)
@@ -113,9 +130,11 @@ def mes_partages(
 def acceder_document(
     token: str,
     request: Request,
-    email: Optional[str] = Query(None),
+    mot_de_passe: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
+    from app.core.security import verify_password
+
     partage = db.query(Share).filter(Share.token == token).first()
 
     if not partage:
@@ -127,12 +146,12 @@ def acceder_document(
     if partage.date_exp and datetime.utcnow() > partage.date_exp:
         raise HTTPException(status_code=403, detail="Ce lien a expiré.")
 
-    # Vérification email si partage privé
-    if partage.email_destinataire:
-        if not email:
-            raise HTTPException(status_code=403, detail="PRIVATE")
-        if email.lower() != partage.email_destinataire.lower():
-            raise HTTPException(status_code=403, detail="Accès refusé. Ce lien est réservé à une autre adresse email.")
+    # Vérification mot de passe si partage protégé
+    if partage.pswd_hache:
+        if not mot_de_passe:
+            raise HTTPException(status_code=403, detail="MOT_DE_PASSE_REQUIS")
+        if not verify_password(mot_de_passe, partage.pswd_hache):
+            raise HTTPException(status_code=403, detail="Mot de passe incorrect.")
 
     journal = JournalAcces(
         id_part=partage.id_part,
@@ -156,7 +175,6 @@ def acceder_document(
         "expediteur_email": expediteur.mail if expediteur else "",
         "lien_telechargement": f"https://filesafe.onrender.com/api/shares/telecharger/{token}"
     }
-
 
 # ── TÉLÉCHARGER VIA LIEN ─────────────────────────────────────────────────────
 @router.get("/telecharger/{token}", status_code=200)
