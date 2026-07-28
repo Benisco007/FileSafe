@@ -7,6 +7,8 @@ import os
 import uuid
 import shutil
 import asyncio
+import cloudinary
+import cloudinary.uploader
 from app.core.config import settings
 
 
@@ -27,15 +29,27 @@ GEMINI_TYPES = {
 async def analyser_date_expiration(id_doc, chemin_fichier: str, type_doc: str, db):
     try:
         import fitz
+        import httpx
+        import io
         from groq import Groq
         from app.core.config import settings
 
+        cloudinary.config(
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET
+        )
+
         if type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
             return
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(chemin_fichier)
+            contenu_bytes = response.content
 
         texte = ""
         if type_doc == "application/pdf":
-            doc_pdf = fitz.open(chemin_fichier)
+            doc_pdf = fitz.open(stream=io.BytesIO(contenu_bytes), filetype="pdf"),
             for page in doc_pdf:
                 texte += page.get_text()
             doc_pdf.close()
@@ -92,11 +106,13 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    TYPES_AUTORISES = ["application/pdf", "image/jpeg", "image/png",
-                       "application/msword",
-                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                       "application/vnd.ms-excel",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
+    TYPES_AUTORISES = [
+        "application/pdf", "image/jpeg", "image/png",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ]
 
     if file.content_type not in TYPES_AUTORISES:
         raise HTTPException(status_code=400, detail="Type de fichier non autorisé.")
@@ -107,12 +123,19 @@ async def upload_document(
     if taille > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Fichier trop volumineux. Maximum 10 Mo.")
 
-    extension = os.path.splitext(file.filename)[1]
-    nom_fichier = f"{uuid.uuid4()}{extension}"
-    chemin = os.path.join(UPLOAD_DIR, nom_fichier)
-
-    with open(chemin, "wb") as f:
-        f.write(contenu)
+    # Upload vers Cloudinary
+    try:
+        import io
+        resultat = cloudinary.uploader.upload(
+            io.BytesIO(contenu),
+            resource_type="raw",
+            folder="filesafe",
+            public_id=f"{uuid.uuid4()}",
+            use_filename=False
+        )
+        url_cloudinary = resultat["secure_url"]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur upload Cloudinary : {str(e)}")
 
     date_expiration = None
     if date_exp:
@@ -126,7 +149,7 @@ async def upload_document(
         type_doc=file.content_type,
         taille_doc=taille,
         categorie=categorie,
-        chemin_fichier=chemin,
+        chemin_fichier=url_cloudinary,  # ← URL Cloudinary au lieu du chemin local
         autorisation_ia=autorisation_ia,
         date_exp=date_expiration,
         id_user=current_user.id_user
@@ -136,9 +159,8 @@ async def upload_document(
     db.commit()
     db.refresh(nouveau_doc)
 
-    # Analyse IA en arrière-plan si autorisée et date_exp non renseignée
     if autorisation_ia and not date_expiration:
-        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, chemin, file.content_type, db))
+        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, url_cloudinary, file.content_type, db))
 
     return {
         "message": "Document téléversé avec succès.",
@@ -150,7 +172,6 @@ async def upload_document(
         "date_ajout": nouveau_doc.date_ajout,
         "status": nouveau_doc.status
     }
-
 
 # ── LISTE ───────────────────────────────────────────────────────────────────
 @router.get("/", status_code=200)
@@ -225,6 +246,8 @@ def telecharger_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from fastapi.responses import RedirectResponse
+
     doc = db.query(Document).filter(
         Document.id_doc == id_doc,
         Document.id_user == current_user.id_user
@@ -233,18 +256,7 @@ def telecharger_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé.")
 
-    if not os.path.exists(doc.chemin_fichier):
-        raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur.")
-
-    disp = "inline" if inline else "attachment"
-
-    return FileResponse(
-        path=doc.chemin_fichier,
-        filename=doc.nom_doc,
-        media_type=doc.type_doc,
-        content_disposition_type=disp
-    )
-
+    return RedirectResponse(url=doc.chemin_fichier)
 
 # ── SUPPRIMER ────────────────────────────────────────────────────────────────
 @router.delete("/{id_doc}", status_code=200)
@@ -261,14 +273,17 @@ def supprimer_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé.")
 
-    if os.path.exists(doc.chemin_fichier):
-        os.remove(doc.chemin_fichier)
+    # Supprimer de Cloudinary
+    try:
+        public_id = doc.chemin_fichier.split("/filesafe/")[-1].split(".")[0]
+        cloudinary.uploader.destroy(f"filesafe/{public_id}", resource_type="raw")
+    except Exception as e:
+        print(f"Erreur suppression Cloudinary: {e}")
 
     db.delete(doc)
     db.commit()
 
     return {"message": "Document supprimé avec succès."}
-
 
 # ── MARQUER COMME CRITIQUE (HORS LIGNE) ─────────────────────────────────────
 @router.patch("/{id_doc}/marquer-critique", status_code=200)
@@ -361,16 +376,20 @@ async def chat_ia(
     if not doc.autorisation_ia:
         raise HTTPException(status_code=403, detail="L'analyse IA n'est pas autorisée pour ce document.")
 
-    if not os.path.exists(doc.chemin_fichier):
-        raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur.")
+    if doc.type_doc == "application/pdf":
+        doc_pdf = fitz.open(doc.chemin_fichier)
 
     if doc.type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Type de fichier non supporté par l'IA (PDF et images uniquement).")
 
     try:
+        import io
+        import httpx
+
         texte = ""
         if doc.type_doc == "application/pdf":
-            doc_pdf = fitz.open(doc.chemin_fichier)
+            response = httpx.get(doc.chemin_fichier)
+            doc_pdf = fitz.open(stream=io.BytesIO(response.content), filetype="pdf")
             for page in doc_pdf:
                 texte += page.get_text()
             doc_pdf.close()

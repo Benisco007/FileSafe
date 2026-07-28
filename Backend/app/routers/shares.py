@@ -184,8 +184,7 @@ def telecharger_via_lien(
     inline: bool = Query(False),
     db: Session = Depends(get_db)
 ):
-    from fastapi.responses import FileResponse
-    import os
+    from fastapi.responses import RedirectResponse
 
     partage = db.query(Share).filter(Share.token == token).first()
 
@@ -196,7 +195,7 @@ def telecharger_via_lien(
         raise HTTPException(status_code=403, detail="Lien expiré.")
 
     if not inline and not partage.peut_telecharger:
-        raise HTTPException(status_code=403, detail="Le téléchargement n'est pas autorisé pour ce lien.")
+        raise HTTPException(status_code=403, detail="Le téléchargement n'est pas autorisé.")
 
     if not inline:
         partage.nb_telechargements = (partage.nb_telechargements or 0) + 1
@@ -212,18 +211,7 @@ def telecharger_via_lien(
     db.commit()
 
     doc = partage.document
-    if not os.path.exists(doc.chemin_fichier):
-        raise HTTPException(status_code=404, detail="Fichier introuvable.")
-
-    disp = "inline" if inline else "attachment"
-
-    return FileResponse(
-        path=doc.chemin_fichier,
-        filename=doc.nom_doc,
-        media_type=doc.type_doc,
-        content_disposition_type=disp
-    )
-
+    return RedirectResponse(url=doc.chemin_fichier)
 
 # ── RÉVOQUER UN LIEN ─────────────────────────────────────────────────────────
 @router.patch("/{id_part}/revoquer", status_code=200)
