@@ -9,15 +9,19 @@ import shutil
 import asyncio
 import cloudinary
 import cloudinary.uploader
-from app.core.config import settings
-
 
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.document import Document
+from app.core.config import settings
 
+cloudinary.config(
+    cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+    api_key=settings.CLOUDINARY_API_KEY,
+    api_secret=settings.CLOUDINARY_API_SECRET
+)
 router = APIRouter()
 
 GEMINI_TYPES = {
