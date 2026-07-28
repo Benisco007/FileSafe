@@ -61,21 +61,25 @@ const handleDownload = async () => {
   if (!documentData.value?.lien_telechargement) return
   try {
     const { data, headers } = await publicApi.get(`/api/shares/telecharger/${token}`, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([data]))
+    
+    const mimeType = headers['content-type'] || 'application/octet-stream'
+    const blob = new Blob([data], { type: mimeType })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    
+
     let fileName = documentData.value.nom_doc || 'document'
     const contentDisposition = headers['content-disposition']
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename="(.+)"/)
-      if (match && match[1]) fileName = match[1]
+      const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
+      if (match && match[1]) fileName = decodeURIComponent(match[1])
     }
-    
+
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Erreur lors du téléchargement:', err)
     alert("Impossible de télécharger ce document.")
