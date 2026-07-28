@@ -8,6 +8,12 @@ const activeFilter = ref('Toutes')
 
 const filters = ['Toutes', 'Alertes expiration', 'Accès extérieurs', 'Invitations']
 
+const getShareDataFromNotif = (notif) => {
+  if (!notif.data || notif.type_notif !== 'Accès extérieurs') return null
+  const parts = notif.data.split('|')
+  return { lien: parts[0], mot_de_passe: parts[1] }
+}
+
 const fetchNotifications = async () => {
   try {
     isLoading.value = true
@@ -150,6 +156,15 @@ const refuserInvitation = async (notif) => {
             <span class="notif-time">{{ formatRelativeTime(notif.date_creation) }}</span>
           </div>
           <p class="notif-desc">{{ notif.description }}</p>
+            <div v-if="notif.type_notif === 'Accès extérieurs' && getShareDataFromNotif(notif)" class="share-access-info">
+              <a :href="getShareDataFromNotif(notif).lien" target="_blank" class="btn-lien">
+                <i class="ti ti-external-link"></i> Accéder au document
+              </a>
+              <div class="mdp-info" v-if="getShareDataFromNotif(notif).mot_de_passe">
+                <i class="ti ti-key"></i> Mot de passe : 
+                <strong>{{ getShareDataFromNotif(notif).mot_de_passe }}</strong>
+              </div>
+            </div>
 
           <!-- Boutons Accepter / Refuser pour invitations dépôt -->
           <div v-if="notif.type_notif === 'invitation_depot'" class="invitation-actions">
@@ -390,4 +405,33 @@ const refuserInvitation = async (notif) => {
 .empty-state i { font-size: 64px; color: var(--input-border); margin-bottom: 16px; }
 .empty-state h2 { color: var(--text-primary); margin-bottom: 8px; }
 .empty-state p { margin-bottom: 0; }
+
+.share-access-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.btn-lien:hover { text-decoration: underline; }
+
+.mdp-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mdp-info strong { color: var(--text-primary); }
 </style>
