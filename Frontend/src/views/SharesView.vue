@@ -73,7 +73,7 @@ const copySuccess = ref(null) // id du partage dont le lien vient d'être copié
 
 const copyLink = async (token, id_part) => {
   // Pointe vers le téléchargement direct sur le BACKEND
-  const url = `http://localhost:5173/share/${token}`
+  const url = `https://file-safe.vercel.app/share/${partage.token}`
   try {
     await navigator.clipboard.writeText(url)
     copySuccess.value = id_part
@@ -140,7 +140,7 @@ const getJournalIcon = (type) => {
 
             <div class="share-actions">
               <div class="link-box">
-                <input type="text" readonly :value="`http://localhost:5173/share/${share.token}`">
+                <input type="text" readonly :value="`https://file-safe.vercel.app/share/${partage.token}`">
                 <button 
                   class="btn-icon" 
                   :class="{ 'copied': copySuccess === share.id_part }"
