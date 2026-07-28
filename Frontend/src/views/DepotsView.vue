@@ -165,7 +165,10 @@ const inviteMember = async () => {
 
 const previewDoc = async (doc) => {
   try {
-    const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger?inline=true`, { responseType: 'blob' })
+    const { data, headers } = await api.get(
+      `/api/depots/${selectedDepot.value.id_depot}/documents/${doc.id_doc}/telecharger?inline=true`,
+      { responseType: 'blob' }
+    )
     const type = headers['content-type'] || doc.type_doc || 'application/pdf'
     const blob = new Blob([data], { type })
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
@@ -182,7 +185,10 @@ const previewDoc = async (doc) => {
 
 const downloadDoc = async (doc) => {
   try {
-    const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger`, { responseType: 'blob' })
+    const { data, headers } = await api.get(
+      `/api/depots/${selectedDepot.value.id_depot}/documents/${doc.id_doc}/telecharger`,
+      { responseType: 'blob' }
+    )
     const mimeType = headers['content-type'] || doc.type_doc || 'application/octet-stream'
     const blob = new Blob([data], { type: mimeType })
     const url = window.URL.createObjectURL(blob)
