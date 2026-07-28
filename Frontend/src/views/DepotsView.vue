@@ -166,7 +166,7 @@ const inviteMember = async () => {
 const previewDoc = async (doc) => {
   try {
     const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger?inline=true`, { responseType: 'blob' })
-    const type = doc.type_doc || headers['content-type'] || 'application/pdf'
+    const type = headers['content-type'] || doc.type_doc || 'application/pdf'
     const blob = new Blob([data], { type })
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
     previewBlob.value = blob
@@ -183,16 +183,22 @@ const previewDoc = async (doc) => {
 const downloadDoc = async (doc) => {
   try {
     const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger`, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([data]))
+    const mimeType = headers['content-type'] || doc.type_doc || 'application/octet-stream'
+    const blob = new Blob([data], { type: mimeType })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     let fileName = doc.nom_doc || 'document'
     const cd = headers['content-disposition']
-    if (cd) { const m = cd.match(/filename="(.+)"/); if (m) fileName = m[1] }
+    if (cd) {
+      const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
+      if (m && m[1]) fileName = decodeURIComponent(m[1])
+    }
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Erreur téléchargement', err)
     alert("Impossible de télécharger ce document.")
