@@ -43,7 +43,7 @@ async def analyser_date_expiration(id_doc, chemin_fichier: str, type_doc: str, d
 
         texte = ""
         if type_doc == "application/pdf":
-            doc_pdf = fitz.open(stream=io.BytesIO(contenu_bytes), filetype="pdf"),
+            doc_pdf = fitz.open(stream=io.BytesIO(contenu_bytes), filetype="pdf")
             for page in doc_pdf:
                 texte += page.get_text()
             doc_pdf.close()
@@ -379,9 +379,6 @@ async def chat_ia(
 
     if not doc.autorisation_ia:
         raise HTTPException(status_code=403, detail="L'analyse IA n'est pas autorisée pour ce document.")
-
-    if doc.type_doc == "application/pdf":
-        doc_pdf = fitz.open(doc.chemin_fichier)
 
     if doc.type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Type de fichier non supporté par l'IA (PDF et images uniquement).")
