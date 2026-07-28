@@ -84,3 +84,14 @@ def supprimer_user(id_user: str, db: Session = Depends(get_db), admin: User = De
     db.commit()
 
     return {"message": "Utilisateur supprimé avec succès."}
+
+
+
+@router.delete("/clean-user/{mail}", status_code=200)
+def clean_user(mail: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.mail == mail).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    db.delete(user)
+    db.commit()
+    return {"message": f"Utilisateur {mail} supprimé"}

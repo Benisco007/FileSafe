@@ -49,7 +49,7 @@ async def partager_document(
     db.commit()
     db.refresh(partage)
 
-    lien_frontend = f"http://localhost:5173/share/{token}"
+    lien_frontend = f"https://file-safe.vercel.app/share/{token}"
 
     if email_destinataire:
         destinataire_user = db.query(User).filter(User.mail == email_destinataire).first()
