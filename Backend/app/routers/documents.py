@@ -132,7 +132,7 @@ async def upload_document(
         import io
         resultat = cloudinary.uploader.upload(
             io.BytesIO(contenu),
-            resource_type="raw",
+            resource_type="auto",
             folder="filesafe",
             public_id=f"{uuid.uuid4()}",
             use_filename=False
