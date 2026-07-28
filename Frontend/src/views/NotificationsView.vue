@@ -1,6 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import api from '../api'
+import Pagination from '../components/shared/Pagination.vue'
 
 const notifications = ref([])
 const isLoading = ref(true)
@@ -57,6 +58,18 @@ const filteredNotifications = computed(() => {
   if (activeFilter.value === 'Toutes') return notifications.value
   if (activeFilter.value === 'Invitations') return notifications.value.filter(n => n.type_notif === 'invitation_depot')
   return notifications.value.filter(n => n.type_notif === activeFilter.value)
+})
+
+const currentPage = ref(1)
+const perPage = 10
+
+const paginatedNotifications = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return filteredNotifications.value.slice(start, start + perPage)
+})
+
+watch(activeFilter, () => {
+  currentPage.value = 1
 })
 
 const markAllAsRead = async () => {
@@ -141,9 +154,10 @@ const refuserInvitation = async (notif) => {
       <p>Vous êtes à jour !</p>
     </div>
 
-    <div v-else class="notifications-list">
+    <div v-else class="notifications-list-wrapper">
+      <div class="notifications-list">
       <div 
-        v-for="notif in filteredNotifications" 
+        v-for="notif in paginatedNotifications" 
         :key="notif.id_notif" 
         :class="['notif-card', { unread: !notif.lue }]"
       >
@@ -196,6 +210,8 @@ const refuserInvitation = async (notif) => {
         <div class="unread-dot" v-if="!notif.lue"></div>
       </div>
     </div>
+    <Pagination :total="filteredNotifications.length" :perPage="perPage" v-model:currentPage="currentPage" />
+    </div>
   </div>
 </template>
 
@@ -207,6 +223,16 @@ const refuserInvitation = async (notif) => {
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
+  height: calc(100vh - 108px);
+  overflow: hidden;
+}
+
+.notifications-list-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -271,6 +297,9 @@ const refuserInvitation = async (notif) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .notif-card {

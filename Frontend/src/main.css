@@ -77,3 +77,42 @@ body {
 :root.light-mode {
   color-scheme: light;
 }
+
+/* ============================================
+   RESPONSIVE GLOBAL — Mobile < 768px
+   ============================================ */
+
+/* Tables scrollables horizontalement sur mobile */
+@media (max-width: 767px) {
+  .table-responsive {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Inputs, buttons, selects : taille minimale tactile */
+  input,
+  select,
+  textarea,
+  button {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* Modales pleine largeur sur mobile */
+  .modal-overlay .modal-content,
+  .modal-content {
+    width: calc(100% - 32px) !important;
+    max-width: none !important;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 16px;
+    border-radius: 16px !important;
+  }
+
+  /* Page headers : stack on mobile */
+  .page-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}

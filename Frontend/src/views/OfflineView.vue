@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useTheme } from '@/composables/useTheme'
 import api from '../api'
 import PreviewModal from '../components/documents/PreviewModal.vue'
+import Pagination from '../components/shared/Pagination.vue'
 
 const { isDark, toggleTheme } = useTheme()
 
@@ -18,6 +19,14 @@ const previewUrl = ref('')
 const previewName = ref('')
 const previewMime = ref('')
 const previewBlob = ref(null)
+
+const currentPage = ref(1)
+const perPage = 10
+
+const paginatedDocs = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return offlineDocs.value.slice(start, start + perPage)
+})
 
 const previewDoc = async (doc) => {
   try {
@@ -52,6 +61,11 @@ const removeDocument = async (id) => {
   try {
     await api.patch(`/api/documents/${id}/marquer-critique`)
     offlineDocs.value = offlineDocs.value.filter((doc) => doc.id_doc !== id)
+    // Reset page if current page becomes empty
+    const totalPages = Math.ceil(offlineDocs.value.length / perPage)
+    if (currentPage.value > totalPages && totalPages > 0) {
+      currentPage.value = totalPages
+    }
   } catch (error) {
     console.error('Erreur lors du retrait du document hors ligne :', error)
   }
@@ -126,9 +140,10 @@ onMounted(async () => {
           <span>Ajoute tes documents les plus importants pour y accéder sans internet.</span>
         </div>
 
-        <div v-else class="offline-list">
+        <div v-else class="offline-list-wrapper">
+          <div class="offline-list">
           <div
-            v-for="doc in offlineDocs"
+            v-for="doc in paginatedDocs"
             :key="doc.id_doc"
             class="offline-row"
           >
@@ -149,6 +164,8 @@ onMounted(async () => {
             </div>
           </div>
         </div>
+        <Pagination :total="offlineDocs.length" :perPage="perPage" v-model:currentPage="currentPage" />
+        </div>
       </div>
     </div>
 
@@ -166,11 +183,14 @@ onMounted(async () => {
 
 <style scoped>
 .offline {
-  padding: 24px 32px;
+  padding: 0;
   background-color: var(--bg-primary);
-  min-height: 100vh;
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
+  height: calc(100vh - 108px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* EN-TÊTE */
@@ -253,6 +273,9 @@ onMounted(async () => {
   flex-direction: column;
   gap: 20px;
   max-width: 900px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* INFO CARD */
@@ -298,10 +321,21 @@ onMounted(async () => {
   margin-bottom: 20px;
 }
 
+.offline-list-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .offline-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .offline-row {
@@ -422,10 +456,6 @@ onMounted(async () => {
 
 /* RESPONSIVE */
 @media (max-width: 768px) {
-  .offline {
-    padding: 20px;
-  }
-
   .info-card {
     flex-direction: column;
   }
@@ -438,6 +468,12 @@ onMounted(async () => {
   .doc-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
   }
 }
 </style>

@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import StatusBadge from '../components/shared/StatusBadge.vue'
 import ShareModal from '../components/documents/ShareModal.vue'
+import Pagination from '../components/shared/Pagination.vue'
 
 const shares = ref([])
 const documents = ref([]) // Pour le dropdown du journal
@@ -11,6 +12,14 @@ const journal = ref([])
 const isLoadingShares = ref(true)
 const isLoadingJournal = ref(false)
 const isShareModalOpen = ref(false)
+
+const currentPage = ref(1)
+const perPage = 10
+
+const paginatedShares = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return shares.value.slice(start, start + perPage)
+})
 
 const fetchShares = async () => {
   try {
@@ -122,8 +131,9 @@ const getJournalIcon = (type) => {
           <p>Aucun partage actif</p>
         </div>
 
-        <div v-else class="shares-list">
-          <div class="share-card" v-for="share in shares" :key="share.id_part">
+        <div v-else class="shares-list-wrapper">
+          <div class="shares-list">
+            <div class="share-card" v-for="share in paginatedShares" :key="share.id_part">
             <div class="share-header">
               <h3 class="doc-name"><i class="ti ti-file-text"></i> {{ share.document?.nom_doc || 'Document' }}</h3>
               <StatusBadge :date_exp="share.date_expiration" />
@@ -155,6 +165,8 @@ const getJournalIcon = (type) => {
               </button>
             </div>
           </div>
+          </div>
+          <Pagination :total="shares.length" :perPage="perPage" v-model:currentPage="currentPage" />
         </div>
       </div>
 
@@ -214,6 +226,8 @@ const getJournalIcon = (type) => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  height: calc(100vh - 108px);
+  overflow: hidden;
 }
 
 .page-header h1 {
@@ -245,6 +259,9 @@ const getJournalIcon = (type) => {
   display: grid;
   grid-template-columns: 1fr;
   gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 @media (min-width: 992px) {
@@ -260,6 +277,12 @@ h2 {
 }
 
 /* Shares List */
+.shares-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .shares-list {
   display: flex;
   flex-direction: column;

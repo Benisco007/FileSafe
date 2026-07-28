@@ -473,4 +473,38 @@ const formatBytes = (bytes, decimals = 2) => {
   font-size: 32px;
   color: var(--primary);
 }
+
+/* Responsive — Tablet */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .metrics-grid,
+  .skeleton-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .dashboard-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Responsive — Mobile */
+@media (max-width: 767px) {
+  .metrics-grid,
+  .skeleton-container {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-content {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .metric-value {
+    font-size: 18px;
+  }
+}
 </style>

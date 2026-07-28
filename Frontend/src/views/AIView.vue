@@ -203,7 +203,8 @@ const formatText = (text) => {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  height: calc(100vh - 48px);
+  height: calc(100vh - 108px);
+  overflow: hidden;
 }
 
 .page-header {
@@ -487,4 +488,33 @@ textarea:disabled { opacity: 0.5; }
 .skeleton-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
 .skeleton-card { height: 80px; background: var(--bg-card); border-radius: 12px; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+/* Responsive — Mobile */
+@media (max-width: 767px) {
+  .ai-view {
+    height: calc(100vh - 88px);
+  }
+
+  .docs-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .msg-bubble {
+    max-width: 85%;
+  }
+
+  .messages-area {
+    padding: 16px;
+  }
+
+  .input-area {
+    padding: 12px 16px;
+  }
+}
 </style>
