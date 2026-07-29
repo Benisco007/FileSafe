@@ -21,23 +21,32 @@ const previewName = ref('')
 const previewMime = ref('')
 const previewBlob = ref(null)
 const isLoadingPreview = ref(false)
+const demanderMdp = ref(false)
+const motDePasseSaisi = ref('')
+const erreurMdp = ref('')
 
-const fetchShareData = async () => {
+const fetchShareData = async (mdp = null) => {
   try {
     isLoading.value = true
-    console.log('[ShareAccess] token lu depuis URL:', token)
-    const { data } = await publicApi.get(`/api/shares/acces/${token}`)
-    console.log('[ShareAccess] réponse backend:', data)
+    errorMsg.value = ''
+    erreurMdp.value = ''
+    const params = mdp ? { mot_de_passe: mdp } : {}
+    const { data } = await publicApi.get(`/api/shares/acces/${token}`, { params })
     documentData.value = data
+    demanderMdp.value = false
   } catch (err) {
-    if (err.response?.status === 404) {
+    const detail = err.response?.data?.detail
+    if (detail === 'MOT_DE_PASSE_REQUIS') {
+      demanderMdp.value = true
+    } else if (detail === 'Mot de passe incorrect.') {
+      erreurMdp.value = 'Mot de passe incorrect. Réessayez.'
+      demanderMdp.value = true
+    } else if (err.response?.status === 404) {
       errorMsg.value = "Ce lien de partage n'existe pas ou est invalide."
     } else if (err.response?.status === 403) {
       errorMsg.value = err.response.data.detail || "Vous n'avez pas accès à ce document."
-    } else if (!err.response) {
-      errorMsg.value = "Impossible de contacter le serveur. Vérifiez que le backend est bien démarré."
     } else {
-      errorMsg.value = `Erreur ${err.response.status} : ${err.response.data?.detail || 'Accès refusé.'}`
+      errorMsg.value = `Erreur ${err.response?.status} : ${err.response?.data?.detail || 'Accès refusé.'}`
     }
   } finally {
     isLoading.value = false
@@ -52,21 +61,25 @@ const handleDownload = async () => {
   if (!documentData.value?.lien_telechargement) return
   try {
     const { data, headers } = await publicApi.get(`/api/shares/telecharger/${token}`, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([data]))
+    
+    const mimeType = headers['content-type'] || 'application/octet-stream'
+    const blob = new Blob([data], { type: mimeType })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    
+
     let fileName = documentData.value.nom_doc || 'document'
     const contentDisposition = headers['content-disposition']
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename="(.+)"/)
-      if (match && match[1]) fileName = match[1]
+      const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
+      if (match && match[1]) fileName = decodeURIComponent(match[1])
     }
-    
+
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Erreur lors du téléchargement:', err)
     alert("Impossible de télécharger ce document.")
@@ -115,6 +128,25 @@ const formatDate = (dateString) => {
     <div v-if="isLoading" class="loading-state">
       <div class="spinner"></div>
       <p>Chargement du document sécurisé...</p>
+    </div>
+
+    <div v-else-if="demanderMdp" class="password-gate">
+      <div class="error-icon">
+        <i class="ti ti-lock"></i>
+      </div>
+      <h2>Document protégé</h2>
+      <p>Ce document nécessite un mot de passe pour y accéder.</p>
+      <input
+        v-model="motDePasseSaisi"
+        type="password"
+        placeholder="Entrez le mot de passe"
+        @keyup.enter="fetchShareData(motDePasseSaisi)"
+        class="mdp-input"
+      />
+      <p v-if="erreurMdp" class="error-msg">{{ erreurMdp }}</p>
+      <button @click="fetchShareData(motDePasseSaisi)" class="btn-primary">
+        Accéder au document
+      </button>
     </div>
 
     <div v-else-if="errorMsg" class="error-state">
@@ -406,4 +438,30 @@ const formatDate = (dateString) => {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.password-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 40px;
+  text-align: center;
+}
+
+.mdp-input {
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 15px;
+  width: 100%;
+  max-width: 300px;
+  outline: none;
+}
+
+.mdp-input:focus {
+  border-color: var(--primary);
+}
+
 </style>

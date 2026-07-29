@@ -1,8 +1,9 @@
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import api from '../api'
 import StatusBadge from '../components/shared/StatusBadge.vue'
 import UploadModal from '../components/documents/UploadModal.vue'
+import Pagination from '../components/shared/Pagination.vue'
 import ShareModal from '../components/documents/ShareModal.vue'
 import PreviewModal from '../components/documents/PreviewModal.vue'
 
@@ -13,6 +14,14 @@ const activeCategory = ref('Tous')
 const isUploadModalOpen = ref(false)
 const isShareModalOpen = ref(false)
 const selectedDocToShare = ref(null)
+
+const currentPage = ref(1)
+const perPage = 10
+
+const paginatedDocuments = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return documents.value.slice(start, start + perPage)
+})
 
 const isPreviewModalOpen = ref(false)
 const previewUrl = ref('')
@@ -42,11 +51,13 @@ let timeoutId = null
 watch(searchQuery, () => {
   clearTimeout(timeoutId)
   timeoutId = setTimeout(() => {
+    currentPage.value = 1
     fetchDocuments()
   }, 300)
 })
 
 watch(activeCategory, () => {
+  currentPage.value = 1
   fetchDocuments()
 })
 
@@ -93,22 +104,26 @@ const toggleIA = async (doc) => {
 const downloadDoc = async (id) => {
   try {
     const { data, headers } = await api.get(`/api/documents/${id}/telecharger`, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([data]))
+    
+    // Récupérer le vrai type MIME depuis les headers
+    const mimeType = headers['content-type'] || 'application/octet-stream'
+    const blob = new Blob([data], { type: mimeType })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    
-    // Tentative de récupération du nom de fichier
+
     let fileName = 'document'
     const contentDisposition = headers['content-disposition']
     if (contentDisposition) {
-      const match = contentDisposition.match(/filename="(.+)"/)
-      if (match && match[1]) fileName = match[1]
+      const match = contentDisposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
+      if (match && match[1]) fileName = decodeURIComponent(match[1])
     }
-    
+
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error(err)
   }
@@ -192,55 +207,58 @@ const previewDoc = async (doc) => {
     </div>
 
     <!-- Documents List -->
-    <div v-else class="documents-list">
-      <div class="document-card" v-for="doc in documents" :key="doc.id_doc">
-        <div class="doc-main-info">
-          <div class="doc-icon">
-            <i :class="['ti', getFileIcon(doc.type_mime)]"></i>
-          </div>
-          <div class="doc-text">
-            <h3 class="doc-title">{{ doc.nom_doc }}</h3>
-            <div class="doc-meta">
-              <span class="category">{{ doc.categorie }}</span>
-              <span class="dot">•</span>
-              <span class="date">Ajouté le {{ formatDate(doc.date_ajout) }}</span>
+    <div v-else class="documents-list-wrapper">
+      <div class="documents-list">
+        <div class="document-card" v-for="doc in paginatedDocuments" :key="doc.id_doc">
+          <div class="doc-main-info">
+            <div class="doc-icon">
+              <i :class="['ti', getFileIcon(doc.type_mime)]"></i>
+            </div>
+            <div class="doc-text">
+              <h3 class="doc-title">{{ doc.nom_doc }}</h3>
+              <div class="doc-meta">
+                <span class="category">{{ doc.categorie }}</span>
+                <span class="dot">•</span>
+                <span class="date">Ajouté le {{ formatDate(doc.date_ajout) }}</span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <div class="doc-status">
-          <StatusBadge :statut="doc.statut" :date_exp="doc.date_exp" />
-        </div>
+          <div class="doc-status">
+            <StatusBadge :statut="doc.statut" :date_exp="doc.date_exp" />
+          </div>
 
-        <div class="doc-actions">
-          <button class="action-btn" title="Aperçu" @click="previewDoc(doc)">
-            <i class="ti ti-eye"></i>
-          </button>
-          <button class="action-btn" title="Télécharger" @click="downloadDoc(doc.id_doc)">
-            <i class="ti ti-download"></i>
-          </button>
-          <button class="action-btn" title="Partager" @click="openShareModal(doc)">
-            <i class="ti ti-share"></i>
-          </button>
-          <button 
-            :class="['action-btn', { active: doc.est_critique }]" 
-            title="Marquer critique / Hors ligne"
-            @click="toggleCritique(doc)"
-          >
-            <i class="ti ti-wifi-off"></i>
-          </button>
-          <button 
-            :class="['action-btn', { active: doc.autorise_ia }]" 
-            title="Autoriser l'analyse IA"
-            @click="toggleIA(doc)"
-          >
-            <i class="ti ti-robot"></i>
-          </button>
-          <button class="action-btn text-danger hover-danger" title="Supprimer" @click="deleteDoc(doc.id_doc)">
-            <i class="ti ti-trash"></i>
-          </button>
+          <div class="doc-actions">
+            <button class="action-btn" title="Aperçu" @click="previewDoc(doc)">
+              <i class="ti ti-eye"></i>
+            </button>
+            <button class="action-btn" title="Télécharger" @click="downloadDoc(doc.id_doc)">
+              <i class="ti ti-download"></i>
+            </button>
+            <button class="action-btn" title="Partager" @click="openShareModal(doc)">
+              <i class="ti ti-share"></i>
+            </button>
+            <button 
+              :class="['action-btn', { active: doc.est_critique }]" 
+              title="Marquer critique / Hors ligne"
+              @click="toggleCritique(doc)"
+            >
+              <i class="ti ti-wifi-off"></i>
+            </button>
+            <button 
+              :class="['action-btn', { active: doc.autorise_ia }]" 
+              title="Autoriser l'analyse IA"
+              @click="toggleIA(doc)"
+            >
+              <i class="ti ti-robot"></i>
+            </button>
+            <button class="action-btn text-danger hover-danger" title="Supprimer" @click="deleteDoc(doc.id_doc)">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
         </div>
       </div>
+      <Pagination :total="documents.length" :perPage="perPage" v-model:currentPage="currentPage" />
     </div>
 
     <!-- Floating Action Button pour Mobile -->
@@ -277,7 +295,16 @@ const previewDoc = async (doc) => {
   flex-direction: column;
   gap: 24px;
   position: relative;
-  min-height: calc(100vh - 100px);
+  height: calc(100vh - 108px);
+  overflow: hidden;
+}
+
+.documents-list-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -394,6 +421,9 @@ const previewDoc = async (doc) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .document-card {

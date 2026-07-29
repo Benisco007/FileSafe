@@ -3,6 +3,12 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 
+const props = defineProps({
+  isOpen: { type: Boolean, default: false }
+})
+
+const emit = defineEmits(['close'])
+
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
@@ -21,7 +27,10 @@ const navItems = isAdmin ? [
 ]
 
 const isActive = (itemRoute) => route.path === itemRoute
-const navigate = (itemRoute) => router.push(itemRoute)
+const navigate = (itemRoute) => {
+  router.push(itemRoute)
+  emit('close')
+}
 
 const handleLogout = () => {
   authStore.logout()
@@ -30,7 +39,7 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <aside :class="['sidebar', { open: isOpen }]">
 
     <!-- LOGO -->
     <div class="logo">
@@ -84,13 +93,19 @@ const handleLogout = () => {
 
 .sidebar {
   width: 220px;
-  min-height: 100vh;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
   background-color: var(--bg-primary);
   border-right: 0.5px solid var(--border-color);
   display: flex;
   flex-direction: column;
   padding: 20px 12px;
   flex-shrink: 0;
+  overflow-y: auto;
+  z-index: 1000;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .logo {
@@ -133,6 +148,7 @@ const handleLogout = () => {
   font-size: var(--font-nav);
   transition: all 0.2s;
   position: relative;
+  min-height: 44px;
 }
 .nav-item:hover {
   background: var(--bg-card);
@@ -210,5 +226,18 @@ const handleLogout = () => {
 }
 .logout-icon:hover {
   color: var(--danger);
+}
+
+/* Mobile: hidden by default, slides in when open */
+@media (max-width: 767px) {
+  .sidebar {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+  }
 }
 </style>

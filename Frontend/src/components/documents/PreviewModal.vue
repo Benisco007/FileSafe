@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch ,nextTick} from 'vue'
 import mammoth from 'mammoth'
 import * as XLSX from 'xlsx'
 
@@ -60,6 +60,68 @@ const convertFile = async () => {
     isConverting.value = false
   }
 }
+
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
+
+const pdfCanvas = ref(null)
+const currentPage = ref(1)
+const totalPages = ref(0)
+let pdfDocument = null
+
+const renderPage = async (pageNum) => {
+  if (!pdfDocument || !pdfCanvas.value) return
+  const page = await pdfDocument.getPage(pageNum)
+  const viewport = page.getViewport({ scale: 1.5 })
+  const canvas = pdfCanvas.value
+  canvas.width = viewport.width
+  canvas.height = viewport.height
+  await page.render({
+    canvasContext: canvas.getContext('2d'),
+    viewport
+  }).promise
+}
+
+const prevPage = async () => {
+  if (currentPage.value > 1) {
+    currentPage.value--
+    await renderPage(currentPage.value)
+  }
+}
+
+const nextPage = async () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++
+    await renderPage(currentPage.value)
+  }
+}
+
+const loadPdf = async () => {
+  if (!props.fileBlob) return
+  const arrayBuffer = await props.fileBlob.arrayBuffer()
+  pdfDocument = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+  totalPages.value = pdfDocument.numPages
+  currentPage.value = 1
+  await renderPage(1)
+}
+
+watch(() => props.isOpen, async (open) => {
+  if (!open) {
+    htmlContent.value = ''
+    currentPage.value = 1
+    totalPages.value = 0
+    pdfDocument = null
+    return
+  }
+  if (isPdf.value) {
+    await nextTick()
+    await loadPdf()
+  }
+  if (isWord.value || isExcel.value) {
+    await convertFile()
+  }
+})
 </script>
 
 <template>
@@ -82,8 +144,19 @@ const convertFile = async () => {
         <!-- Image -->
         <img v-else-if="isImage && fileUrl" :src="fileUrl" class="preview-img" alt="Aperçu" />
 
-        <!-- PDF -->
-        <iframe v-else-if="isPdf && fileUrl" :src="fileUrl" class="preview-pdf" frameborder="0"></iframe>
+        <!-- PDF -->       
+        <div v-else-if="isPdf && fileBlob" class="pdf-viewer">
+          <div class="pdf-controls">
+            <button @click="prevPage" :disabled="currentPage <= 1" class="pdf-btn">
+              <i class="ti ti-chevron-left"></i>
+            </button>
+            <span class="pdf-page-info">Page {{ currentPage }} / {{ totalPages }}</span>
+            <button @click="nextPage" :disabled="currentPage >= totalPages" class="pdf-btn">
+              <i class="ti ti-chevron-right"></i>
+            </button>
+          </div>
+          <canvas ref="pdfCanvas" class="pdf-canvas"></canvas>
+        </div>
 
         <!-- Text -->
         <iframe v-else-if="isText && fileUrl" :src="fileUrl" class="preview-pdf" frameborder="0"></iframe>
@@ -270,6 +343,62 @@ const convertFile = async () => {
 
 .animate-spin {
   animation: spin 1s linear infinite;
+}
+
+.pdf-viewer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background-color: #525659;
+  padding: 20px;
+  gap: 16px;
+}
+
+.pdf-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(0,0,0,0.5);
+  padding: 8px 16px;
+  border-radius: 20px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.pdf-btn {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.pdf-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.2);
+}
+
+.pdf-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.pdf-page-info {
+  color: white;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.pdf-canvas {
+  max-width: 100%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  border-radius: 4px;
 }
 
 @keyframes spin {

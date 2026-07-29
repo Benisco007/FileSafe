@@ -1,12 +1,19 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import api from '../api'
+import Pagination from '../components/shared/Pagination.vue'
 
 const notifications = ref([])
 const isLoading = ref(true)
 const activeFilter = ref('Toutes')
 
 const filters = ['Toutes', 'Alertes expiration', 'Accès extérieurs', 'Invitations']
+
+const getShareDataFromNotif = (notif) => {
+  if (!notif.data || notif.type_notif !== 'Accès extérieurs') return null
+  const parts = notif.data.split('|')
+  return { lien: parts[0], mot_de_passe: parts[1] }
+}
 
 const fetchNotifications = async () => {
   try {
@@ -51,6 +58,18 @@ const filteredNotifications = computed(() => {
   if (activeFilter.value === 'Toutes') return notifications.value
   if (activeFilter.value === 'Invitations') return notifications.value.filter(n => n.type_notif === 'invitation_depot')
   return notifications.value.filter(n => n.type_notif === activeFilter.value)
+})
+
+const currentPage = ref(1)
+const perPage = 10
+
+const paginatedNotifications = computed(() => {
+  const start = (currentPage.value - 1) * perPage
+  return filteredNotifications.value.slice(start, start + perPage)
+})
+
+watch(activeFilter, () => {
+  currentPage.value = 1
 })
 
 const markAllAsRead = async () => {
@@ -135,9 +154,10 @@ const refuserInvitation = async (notif) => {
       <p>Vous êtes à jour !</p>
     </div>
 
-    <div v-else class="notifications-list">
+    <div v-else class="notifications-list-wrapper">
+      <div class="notifications-list">
       <div 
-        v-for="notif in filteredNotifications" 
+        v-for="notif in paginatedNotifications" 
         :key="notif.id_notif" 
         :class="['notif-card', { unread: !notif.lue }]"
       >
@@ -150,6 +170,15 @@ const refuserInvitation = async (notif) => {
             <span class="notif-time">{{ formatRelativeTime(notif.date_creation) }}</span>
           </div>
           <p class="notif-desc">{{ notif.description }}</p>
+            <div v-if="notif.type_notif === 'Accès extérieurs' && getShareDataFromNotif(notif)" class="share-access-info">
+              <a :href="getShareDataFromNotif(notif).lien" target="_blank" class="btn-lien">
+                <i class="ti ti-external-link"></i> Accéder au document
+              </a>
+              <div class="mdp-info" v-if="getShareDataFromNotif(notif).mot_de_passe">
+                <i class="ti ti-key"></i> Mot de passe : 
+                <strong>{{ getShareDataFromNotif(notif).mot_de_passe }}</strong>
+              </div>
+            </div>
 
           <!-- Boutons Accepter / Refuser pour invitations dépôt -->
           <div v-if="notif.type_notif === 'invitation_depot'" class="invitation-actions">
@@ -181,6 +210,8 @@ const refuserInvitation = async (notif) => {
         <div class="unread-dot" v-if="!notif.lue"></div>
       </div>
     </div>
+    <Pagination :total="filteredNotifications.length" :perPage="perPage" v-model:currentPage="currentPage" />
+    </div>
   </div>
 </template>
 
@@ -192,6 +223,16 @@ const refuserInvitation = async (notif) => {
   max-width: 800px;
   margin: 0 auto;
   width: 100%;
+  height: calc(100vh - 108px);
+  overflow: hidden;
+}
+
+.notifications-list-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -256,6 +297,9 @@ const refuserInvitation = async (notif) => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .notif-card {
@@ -390,4 +434,33 @@ const refuserInvitation = async (notif) => {
 .empty-state i { font-size: 64px; color: var(--input-border); margin-bottom: 16px; }
 .empty-state h2 { color: var(--text-primary); margin-bottom: 8px; }
 .empty-state p { margin-bottom: 0; }
+
+.share-access-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-lien {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.btn-lien:hover { text-decoration: underline; }
+
+.mdp-info {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mdp-info strong { color: var(--text-primary); }
 </style>

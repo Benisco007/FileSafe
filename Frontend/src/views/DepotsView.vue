@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import api from '../api'
 import PreviewModal from '../components/documents/PreviewModal.vue'
+import Pagination from '../components/shared/Pagination.vue'
 
 const depots = ref([])
 const isLoading = ref(true)
@@ -27,6 +28,35 @@ const previewUrl = ref('')
 const previewName = ref('')
 const previewMime = ref('')
 const previewBlob = ref(null)
+
+// Pagination
+const depotsPage = ref(1)
+const depotsPerPage = 6
+const docsPage = ref(1)
+const docsPerPage = 10
+const activitesPage = ref(1)
+const activitesPerPage = 10
+
+const paginatedDepots = computed(() => {
+  const start = (depotsPage.value - 1) * depotsPerPage
+  return depots.value.slice(start, start + depotsPerPage)
+})
+
+const paginatedDocs = computed(() => {
+  const docs = selectedDepot.value?.documents || []
+  const start = (docsPage.value - 1) * docsPerPage
+  return docs.slice(start, start + docsPerPage)
+})
+
+const activitesFiltrees = computed(() => {
+  if (filtreActivite.value === 'Tous') return activites.value
+  return activites.value.filter(a => a.type_action === filtreActivite.value)
+})
+
+const paginatedActivites = computed(() => {
+  const start = (activitesPage.value - 1) * activitesPerPage
+  return activitesFiltrees.value.slice(start, start + activitesPerPage)
+})
 
 // Permission de l'utilisateur connecté dans le dépôt sélectionné
 const maPermission = computed(() => selectedDepot.value?.permission || 'lecture')
@@ -111,6 +141,8 @@ const createDepot = async () => {
 
 const openDepot = (depot) => {
   selectedDepot.value = { ...depot, activeTab: 'Documents' }
+  docsPage.value = 1
+  activitesPage.value = 1
 }
 
 const closeDepot = () => {
@@ -119,9 +151,24 @@ const closeDepot = () => {
   fetchDepots()
 }
 
+const filtreActivite = ref('Tous')
+
+const typesActivite = [
+  { label: 'Tous', value: 'Tous', icon: 'ti-list' },
+  { label: 'Téléversements', value: 'upload', icon: 'ti-upload' },
+  { label: 'Consultations', value: 'consultation', icon: 'ti-eye' },
+  { label: 'Téléchargements', value: 'telechargement', icon: 'ti-download' },
+  { label: 'Invitations', value: 'invitation', icon: 'ti-user-plus' },
+  { label: 'Adhésions', value: 'adhesion', icon: 'ti-user-check' },
+]
+
 const onTabChange = (tab) => {
   selectedDepot.value.activeTab = tab
-  if (tab === 'Activité') fetchActivites()
+  if (tab === 'Activité') {
+    activitesPage.value = 1
+    fetchActivites()
+  }
+  if (tab === 'Documents') docsPage.value = 1
 }
 
 const updatePermission = async (membre) => {
@@ -165,8 +212,11 @@ const inviteMember = async () => {
 
 const previewDoc = async (doc) => {
   try {
-    const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger?inline=true`, { responseType: 'blob' })
-    const type = doc.type_doc || headers['content-type'] || 'application/pdf'
+    const { data, headers } = await api.get(
+      `/api/depots/${selectedDepot.value.id_depot}/documents/${doc.id_doc}/telecharger?inline=true`,
+      { responseType: 'blob' }
+    )
+    const type = headers['content-type'] || doc.type_doc || 'application/pdf'
     const blob = new Blob([data], { type })
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
     previewBlob.value = blob
@@ -182,17 +232,26 @@ const previewDoc = async (doc) => {
 
 const downloadDoc = async (doc) => {
   try {
-    const { data, headers } = await api.get(`/api/documents/${doc.id_doc}/telecharger`, { responseType: 'blob' })
-    const url = window.URL.createObjectURL(new Blob([data]))
+    const { data, headers } = await api.get(
+      `/api/depots/${selectedDepot.value.id_depot}/documents/${doc.id_doc}/telecharger`,
+      { responseType: 'blob' }
+    )
+    const mimeType = headers['content-type'] || doc.type_doc || 'application/octet-stream'
+    const blob = new Blob([data], { type: mimeType })
+    const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     let fileName = doc.nom_doc || 'document'
     const cd = headers['content-disposition']
-    if (cd) { const m = cd.match(/filename="(.+)"/); if (m) fileName = m[1] }
+    if (cd) {
+      const m = cd.match(/filename\*?=(?:UTF-8'')?["']?([^"';\n]+)["']?/i)
+      if (m && m[1]) fileName = decodeURIComponent(m[1])
+    }
     link.setAttribute('download', fileName)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
   } catch (err) {
     console.error('Erreur téléchargement', err)
     alert("Impossible de télécharger ce document.")
@@ -242,34 +301,37 @@ const formatDate = (d) => {
         <button class="btn-primary" @click="isCreateModalOpen = true">Créer un dépôt</button>
       </div>
 
-      <div v-else class="depots-grid">
-        <div class="depot-card" v-for="depot in depots" :key="depot.id_depot">
-          <div class="depot-header">
-            <div class="depot-icon"><i class="ti ti-folder-shared"></i></div>
-            <span class="depot-type">{{ depot.type_dep }}</span>
-          </div>
-          <h3 class="depot-name">{{ depot.nom_dep }}</h3>
-          
-          <div class="depot-stats">
-            <div class="stat-item"><i class="ti ti-file"></i><span>{{ depot.documents?.length || 0 }} documents</span></div>
-            <div class="stat-item"><i class="ti ti-users"></i><span>{{ depot.nb_membres || 0 }} membres</span></div>
-          </div>
-
-          <div class="members-stack">
-            <div 
-              class="member-avatar" 
-              v-for="(membre, idx) in (depot.membres || []).filter(m => m.statut === 'accepte').slice(0, 3)" 
-              :key="idx"
-              :title="membre.user?.prenom + (membre.permission === 'admin' ? ' (Admin)' : '')"
-            >
-              {{ membre.user?.prenom?.charAt(0).toUpperCase() || 'U' }}
-              <span v-if="membre.permission === 'admin'" class="crown">👑</span>
+      <div v-else class="depots-grid-wrapper">
+        <div class="depots-grid">
+          <div class="depot-card" v-for="depot in paginatedDepots" :key="depot.id_depot">
+            <div class="depot-header">
+              <div class="depot-icon"><i class="ti ti-folder-shared"></i></div>
+              <span class="depot-type">{{ depot.type_dep }}</span>
             </div>
-            <div class="member-avatar more" v-if="(depot.nb_membres || 0) > 3">+{{ depot.nb_membres - 3 }}</div>
-          </div>
+            <h3 class="depot-name">{{ depot.nom_dep }}</h3>
+            
+            <div class="depot-stats">
+              <div class="stat-item"><i class="ti ti-file"></i><span>{{ depot.documents?.length || 0 }} documents</span></div>
+              <div class="stat-item"><i class="ti ti-users"></i><span>{{ depot.nb_membres || 0 }} membres</span></div>
+            </div>
 
-          <button class="btn-outline" @click="openDepot(depot)">Accéder</button>
+            <div class="members-stack">
+              <div 
+                class="member-avatar" 
+                v-for="(membre, idx) in (depot.membres || []).filter(m => m.statut === 'accepte').slice(0, 3)" 
+                :key="idx"
+                :title="membre.user?.prenom + (membre.permission === 'admin' ? ' (Admin)' : '')"
+              >
+                {{ membre.user?.prenom?.charAt(0).toUpperCase() || 'U' }}
+                <span v-if="membre.permission === 'admin'" class="crown">👑</span>
+              </div>
+              <div class="member-avatar more" v-if="(depot.nb_membres || 0) > 3">+{{ depot.nb_membres - 3 }}</div>
+            </div>
+
+            <button class="btn-outline" @click="openDepot(depot)">Accéder</button>
+          </div>
         </div>
+        <Pagination :total="depots.length" :perPage="depotsPerPage" v-model:currentPage="depotsPage" />
       </div>
     </div>
 
@@ -306,7 +368,7 @@ const formatDate = (d) => {
 
       <div class="tab-content">
         <!-- Onglet Documents -->
-        <div v-if="selectedDepot.activeTab === 'Documents'">
+        <div v-if="selectedDepot.activeTab === 'Documents'" class="tab-pane">
           <div class="tab-actions" v-if="peutEcrire">
             <button class="btn-primary" @click="openAddDocModal">
               <i class="ti ti-plus"></i> Ajouter un document
@@ -319,24 +381,29 @@ const formatDate = (d) => {
             <span v-if="peutEcrire">Ajoutez des documents depuis votre coffre personnel</span>
           </div>
 
-          <div v-else class="docs-list">
-            <div class="doc-item" v-for="doc in selectedDepot.documents" :key="doc.id_doc">
-              <i class="ti ti-file-text doc-icon"></i>
-              <div class="doc-info">
-                <span class="doc-name">{{ doc.nom_doc }}</span>
-                <span class="doc-meta">{{ doc.categorie }} • {{ new Date(doc.date_ajout).toLocaleDateString('fr-FR') }}</span>
-              </div>
-              <span :class="['badge', doc.status === 'Valide' ? 'badge-valide' : 'badge-expire']">{{ doc.status }}</span>
-              <div class="doc-actions-inline">
-                <button class="action-btn" title="Aperçu" @click="previewDoc(doc)"><i class="ti ti-eye"></i></button>
-                <button class="action-btn" title="Télécharger" @click="downloadDoc(doc)" v-if="peutEcrire"><i class="ti ti-download"></i></button>
+          <div v-else class="docs-list-wrapper">
+            <div class="docs-list">
+              <div class="doc-item" v-for="doc in paginatedDocs" :key="doc.id_doc">
+                <i class="ti ti-file-text doc-icon"></i>
+                <div class="doc-info">
+                  <span class="doc-name">{{ doc.nom_doc }}</span>
+                  <span class="doc-meta">{{ doc.categorie }} • {{ new Date(doc.date_ajout).toLocaleDateString('fr-FR') }}</span>
+                </div>
+
+                <span :class="['badge', doc.status === 'Valide' ? 'badge-valide' : 'badge-expire']">{{ doc.status }}</span>
+                <div class="doc-actions-inline">
+                  <button class="action-btn" title="Aperçu" @click="previewDoc(doc)"><i class="ti ti-eye"></i></button>
+                  <button class="action-btn" title="Télécharger" @click="downloadDoc(doc)" v-if="peutEcrire"><i class="ti ti-download"></i></button>
+                </div>
               </div>
             </div>
+            <Pagination :total="(selectedDepot.documents || []).length" :perPage="docsPerPage" v-model:currentPage="docsPage" />
           </div>
         </div>
 
         <!-- Onglet Membres -->
-        <div v-if="selectedDepot.activeTab === 'Membres'">
+        <div v-if="selectedDepot.activeTab === 'Membres'" class="tab-pane">
+          <div class="table-responsive">
           <table class="members-table">
             <thead>
               <tr>
@@ -387,35 +454,58 @@ const formatDate = (d) => {
               </tr>
             </tbody>
           </table>
+          </div>
         </div>
 
-        <!-- Onglet Activité -->
-        <div v-if="selectedDepot.activeTab === 'Activité'">
+              <!-- Onglet Activité -->
+        <div v-if="selectedDepot.activeTab === 'Activité'" class="tab-pane">
           <div v-if="isLoadingActivites" class="skeleton-list">
             <div class="skeleton-item" v-for="i in 4" :key="i"></div>
           </div>
-          <div v-else-if="activites.length === 0" class="empty-state">
-            <i class="ti ti-activity"></i>
-            <p>Aucune activité enregistrée</p>
-          </div>
-          <div v-else class="activites-list">
-            <div class="activite-item" v-for="(log, idx) in activites" :key="idx">
-              <div class="activite-icon">
-                <i :class="['ti', getActionIcon(log.type_action)]"></i>
+          <div v-else class="activites-container">
+            <!-- Filtres par type -->
+            <div class="activite-filters">
+              <button
+                v-for="type in typesActivite"
+                :key="type.value"
+                :class="['pill', { active: filtreActivite === type.value }]"
+                @click="filtreActivite = type.value; activitesPage = 1"
+              >
+                <i :class="['ti', type.icon]"></i> {{ type.label }}
+              </button>
+            </div>
+
+            <div v-if="activitesFiltrees.length === 0" class="empty-state">
+              <i class="ti ti-activity"></i>
+              <p>Aucune activité pour ce filtre</p>
+            </div>
+
+            <div v-else class="activites-list-wrapper">
+              <div class="activites-list">
+                <div class="activite-item" v-for="(log, idx) in paginatedActivites" :key="idx">
+                  <div class="activite-icon">
+                    <i :class="['ti', getActionIcon(log.type_action)]"></i>
+                  </div>
+                  <div class="activite-content">
+                    <span class="activite-detail">{{ log.detail || log.type_action }}</span>
+                    <span class="activite-doc" v-if="log.nom_document">📄 {{ log.nom_document }}</span>
+                    <span class="activite-meta">
+                      {{ log.user?.prenom }} {{ log.user?.nom }} • {{ formatDate(log.date_action) }}
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div class="activite-content">
-                <span class="activite-detail">{{ log.detail || log.type_action }}</span>
-                <span class="activite-doc" v-if="log.nom_document">📄 {{ log.nom_document }}</span>
-                <span class="activite-meta">
-                  {{ log.user?.prenom }} {{ log.user?.nom }} • {{ formatDate(log.date_action) }}
-                </span>
-              </div>
+              <Pagination
+                :total="activitesFiltrees.length"
+                :perPage="activitesPerPage"
+                v-model:currentPage="activitesPage"
+              />
             </div>
           </div>
         </div>
       </div>
     </div>
-
+    
     <!-- Modal Créer Dépôt -->
     <div v-if="isCreateModalOpen" class="modal-overlay" @click.self="isCreateModalOpen = false">
       <div class="modal-content">
@@ -500,15 +590,17 @@ const formatDate = (d) => {
 </template>
 
 <style scoped>
-.depots-view { display: flex; flex-direction: column; gap: 24px; }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.depots-view { display: flex; flex-direction: column; gap: 24px; height: calc(100vh - 108px); overflow: hidden; }
+.depots-list-view { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-shrink: 0; }
 .page-header h1 { font-size: 24px; font-weight: 600; color: var(--text-primary); }
 
 .btn-primary { background-color: var(--primary); color: var(--bg-primary); border: none; padding: 10px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background-color 0.2s; }
 .btn-primary:hover:not(:disabled) { background-color: var(--primary-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.depots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; }
+.depots-grid-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.depots-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px; flex: 1; overflow-y: auto; min-height: 0; }
 .depot-card { background-color: var(--bg-card); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 16px; transition: transform 0.2s, box-shadow 0.2s; }
 .depot-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
 
@@ -532,7 +624,8 @@ const formatDate = (d) => {
 .btn-outline { background-color: transparent; border: 1px solid var(--primary); color: var(--primary); padding: 10px; border-radius: 8px; font-weight: 500; cursor: pointer; margin-top: 8px; transition: all 0.2s; }
 .btn-outline:hover { background-color: var(--primary); color: var(--bg-primary); }
 
-.inner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
+.depot-inner-view { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.inner-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; flex-shrink: 0; }
 .btn-back { background: none; border: none; color: var(--text-secondary); font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: color 0.2s; width: 100%; margin-bottom: -10px; }
 .btn-back:hover { color: var(--text-primary); }
 .depot-title-area { display: flex; align-items: center; gap: 16px; }
@@ -544,8 +637,12 @@ const formatDate = (d) => {
 .tab:hover { color: var(--text-primary); }
 .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-.tab-actions { margin-bottom: 16px; }
-.docs-list { display: flex; flex-direction: column; gap: 8px; }
+.tab-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.tab-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.activites-container { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.tab-actions { margin-bottom: 16px; flex-shrink: 0; }
+.docs-list-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.docs-list { display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto; min-height: 0; }
 .doc-item { display: flex; align-items: center; gap: 12px; background-color: var(--bg-card); padding: 16px; border-radius: 12px; }
 .doc-item i.doc-icon { font-size: 24px; color: var(--primary); }
 .doc-info { display: flex; flex-direction: column; flex: 1; }
@@ -574,7 +671,8 @@ const formatDate = (d) => {
 .btn-icon.text-danger { color: var(--danger); }
 .btn-icon.text-danger:hover { background-color: rgba(239,68,68,0.1); }
 
-.activites-list { display: flex; flex-direction: column; gap: 8px; }
+.activites-list-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.activites-list { display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto; min-height: 0; }
 .activite-item { display: flex; align-items: flex-start; gap: 12px; background-color: var(--bg-card); padding: 16px; border-radius: 12px; }
 .activite-icon { width: 40px; height: 40px; background-color: var(--bg-primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
 .activite-content { display: flex; flex-direction: column; gap: 4px; }
@@ -586,6 +684,43 @@ const formatDate = (d) => {
 .text-warning { color: #F59E0B; }
 .text-danger { color: var(--danger); }
 .text-secondary { color: var(--text-secondary); }
+.activite-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 30px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pill:hover {
+  background-color: rgba(244, 180, 0, 0.05);
+  color: var(--text-primary);
+  border-color: rgba(244, 180, 0, 0.3);
+}
+
+.pill.active {
+  background-color: rgba(244, 180, 0, 0.15);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.pill i {
+  font-size: 16px;
+}
 
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
 .modal-content { background-color: var(--bg-card); padding: 32px; border-radius: 18px; width: 100%; max-width: 450px; }
@@ -608,4 +743,23 @@ const formatDate = (d) => {
 .skeleton-list { display: flex; flex-direction: column; gap: 8px; }
 .skeleton-item { height: 70px; background-color: var(--bg-card); border-radius: 12px; animation: pulse 1.5s infinite; }
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+/* Responsive — Mobile */
+@media (max-width: 767px) {
+  .depots-view { height: auto; min-height: calc(100vh - 108px); }
+  .depots-grid { grid-template-columns: 1fr; }
+  .depot-title-area { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .depot-title-area h1 { font-size: 22px; }
+  .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tab { padding: 12px 16px; font-size: 14px; white-space: nowrap; }
+  .doc-item { flex-wrap: wrap; gap: 8px; }
+  .doc-actions-inline { width: 100%; justify-content: flex-end; }
+  .inner-header { flex-direction: column; align-items: flex-start; }
+  .activite-item { flex-direction: column; }
+}
+
+/* Responsive — Tablet */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .depots-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+}
 </style>

@@ -2,6 +2,12 @@
 import { ref, onMounted } from 'vue'
 import NotificationBell from './NotificationBell.vue'
 
+defineProps({
+  sidebarOpen: { type: Boolean, default: false }
+})
+
+const emit = defineEmits(['toggle-sidebar'])
+
 const isDarkMode = ref(true)
 
 onMounted(() => {
@@ -29,6 +35,9 @@ const toggleTheme = () => {
 
 <template>
   <header class="topbar">
+    <button class="burger-btn" @click="emit('toggle-sidebar')" aria-label="Menu">
+      <i :class="sidebarOpen ? 'ti ti-x' : 'ti ti-menu-2'"></i>
+    </button>
     <div class="spacer"></div>
     <div class="actions">
       <button class="theme-toggle" @click="toggleTheme" title="Changer le thème">
@@ -47,6 +56,27 @@ const toggleTheme = () => {
   padding: 0 24px;
   background-color: var(--bg-primary);
   border-bottom: 0.5px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.burger-btn {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  transition: background-color 0.2s;
+  margin-right: 8px;
+}
+
+.burger-btn:hover {
+  background-color: var(--bg-card);
 }
 
 .spacer {
@@ -81,5 +111,21 @@ const toggleTheme = () => {
 .theme-toggle i {
   font-size: 24px;
 }
-</style>
 
+/* Mobile: show burger button, shorter topbar */
+@media (max-width: 767px) {
+  .topbar {
+    height: 56px;
+    padding: 0 16px;
+  }
+
+  .burger-btn {
+    display: flex;
+  }
+
+  .theme-toggle {
+    width: 44px;
+    height: 44px;
+  }
+}
+</style>
