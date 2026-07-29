@@ -352,3 +352,49 @@ def historique_activites(
         }
         for log in logs
     ]
+
+# ── TÉLÉCHARGER UN DOCUMENT DU DÉPÔT ─────────────────────────────────────────
+@router.get("/{id_depot}/documents/{id_doc}/telecharger", status_code=200)
+async def telecharger_document_depot(
+    id_depot: str,
+    id_doc: str,
+    inline: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    import httpx
+    from fastapi.responses import StreamingResponse
+    import io
+
+    # Vérifier que l'utilisateur est membre du dépôt
+    membre = get_membre(db, id_depot, current_user.id_user)
+    if not membre:
+        raise HTTPException(status_code=403, detail="Accès non autorisé.")
+
+    # Vérifier que le document est dans le dépôt
+    depot_doc = db.query(DepotDocument).filter(
+        DepotDocument.id_depot == id_depot,
+        DepotDocument.id_doc == id_doc
+    ).first()
+    if not depot_doc:
+        raise HTTPException(status_code=404, detail="Document non trouvé dans ce dépôt.")
+
+    doc = depot_doc.document
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(doc.chemin_fichier)
+
+    disp = "inline" if inline else "attachment"
+
+    log_activite(db, id_depot, current_user.id_user,
+                 "telechargement" if not inline else "consultation",
+                 nom_document=doc.nom_doc)
+    db.commit()
+
+    return StreamingResponse(
+        io.BytesIO(response.content),
+        media_type=doc.type_doc,
+        headers={
+            "Content-Disposition": f'{disp}; filename="{doc.nom_doc}"'
+        }
+    )

@@ -1,18 +1,15 @@
-from passlib.context import CryptContext
 from jose import jwt
 from datetime import datetime, timedelta
 from app.core.config import settings
-
+import bcrypt
 import random
 import string
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-def hash_password(password: str):
-    return pwd_context.hash(password)
-
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+def verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt.checkpw(plain.encode('utf-8'), hashed.encode('utf-8'))
 
 def generate_2fa_code():
     return ''.join(random.choices(string.digits, k=6))

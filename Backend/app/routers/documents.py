@@ -3,18 +3,19 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+from supabase import create_client
 import os
 import uuid
-import shutil
 import asyncio
-from app.core.config import settings
-
 
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.document import Document
+from app.core.config import settings
+
+supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY) 
 
 router = APIRouter()
 
@@ -27,15 +28,22 @@ GEMINI_TYPES = {
 async def analyser_date_expiration(id_doc, chemin_fichier: str, type_doc: str, db):
     try:
         import fitz
+        import httpx
+        import io
         from groq import Groq
         from app.core.config import settings
 
+
         if type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
             return
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(chemin_fichier)
+            contenu_bytes = response.content
 
         texte = ""
         if type_doc == "application/pdf":
-            doc_pdf = fitz.open(chemin_fichier)
+            doc_pdf = fitz.open(stream=io.BytesIO(contenu_bytes), filetype="pdf")
             for page in doc_pdf:
                 texte += page.get_text()
             doc_pdf.close()
@@ -92,11 +100,13 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    TYPES_AUTORISES = ["application/pdf", "image/jpeg", "image/png",
-                       "application/msword",
-                       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                       "application/vnd.ms-excel",
-                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]
+    TYPES_AUTORISES = [
+        "application/pdf", "image/jpeg", "image/png",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    ]
 
     if file.content_type not in TYPES_AUTORISES:
         raise HTTPException(status_code=400, detail="Type de fichier non autorisé.")
@@ -107,12 +117,18 @@ async def upload_document(
     if taille > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Fichier trop volumineux. Maximum 10 Mo.")
 
-    extension = os.path.splitext(file.filename)[1]
-    nom_fichier = f"{uuid.uuid4()}{extension}"
-    chemin = os.path.join(UPLOAD_DIR, nom_fichier)
-
-    with open(chemin, "wb") as f:
-        f.write(contenu)
+    # Upload vers Cloudinary
+    try:
+        import io
+        nom_fichier = f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
+        supabase.storage.from_("filesafe").upload(
+            path=nom_fichier,
+            file=contenu,
+            file_options={"content-type": file.content_type}
+        )
+        url_supabase = f"{settings.SUPABASE_URL}/storage/v1/object/public/filesafe/{nom_fichier}"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur upload Supabase : {str(e)}")
 
     date_expiration = None
     if date_exp:
@@ -126,7 +142,7 @@ async def upload_document(
         type_doc=file.content_type,
         taille_doc=taille,
         categorie=categorie,
-        chemin_fichier=chemin,
+        chemin_fichier=url_supabase,
         autorisation_ia=autorisation_ia,
         date_exp=date_expiration,
         id_user=current_user.id_user
@@ -136,9 +152,8 @@ async def upload_document(
     db.commit()
     db.refresh(nouveau_doc)
 
-    # Analyse IA en arrière-plan si autorisée et date_exp non renseignée
     if autorisation_ia and not date_expiration:
-        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, chemin, file.content_type, db))
+        asyncio.create_task(analyser_date_expiration(nouveau_doc.id_doc, url_supabase, file.content_type, db))
 
     return {
         "message": "Document téléversé avec succès.",
@@ -150,7 +165,6 @@ async def upload_document(
         "date_ajout": nouveau_doc.date_ajout,
         "status": nouveau_doc.status
     }
-
 
 # ── LISTE ───────────────────────────────────────────────────────────────────
 @router.get("/", status_code=200)
@@ -219,12 +233,16 @@ def consulter_document(
 
 # ── TÉLÉCHARGER ──────────────────────────────────────────────────────────────
 @router.get("/{id_doc}/telecharger", status_code=200)
-def telecharger_document(
+async def telecharger_document(
     id_doc: str,
     inline: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    import httpx
+    from fastapi.responses import StreamingResponse
+    import io
+
     doc = db.query(Document).filter(
         Document.id_doc == id_doc,
         Document.id_user == current_user.id_user
@@ -233,18 +251,18 @@ def telecharger_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé.")
 
-    if not os.path.exists(doc.chemin_fichier):
-        raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur.")
+    async with httpx.AsyncClient() as client:
+        response = await client.get(doc.chemin_fichier)
 
     disp = "inline" if inline else "attachment"
 
-    return FileResponse(
-        path=doc.chemin_fichier,
-        filename=doc.nom_doc,
+    return StreamingResponse(
+        io.BytesIO(response.content),
         media_type=doc.type_doc,
-        content_disposition_type=disp
+        headers={
+            "Content-Disposition": f'{disp}; filename="{doc.nom_doc}"'
+        }
     )
-
 
 # ── SUPPRIMER ────────────────────────────────────────────────────────────────
 @router.delete("/{id_doc}", status_code=200)
@@ -261,15 +279,16 @@ def supprimer_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document non trouvé.")
 
-    if os.path.exists(doc.chemin_fichier):
-        os.remove(doc.chemin_fichier)
+    try:
+        nom_fichier = doc.chemin_fichier.split("/filesafe/")[-1]
+        supabase.storage.from_("filesafe").remove([nom_fichier])
+    except Exception as e:
+        print(f"Erreur suppression Supabase: {e}")
 
     db.delete(doc)
     db.commit()
 
     return {"message": "Document supprimé avec succès."}
-
-
 # ── MARQUER COMME CRITIQUE (HORS LIGNE) ─────────────────────────────────────
 @router.patch("/{id_doc}/marquer-critique", status_code=200)
 def marquer_critique(
@@ -361,16 +380,17 @@ async def chat_ia(
     if not doc.autorisation_ia:
         raise HTTPException(status_code=403, detail="L'analyse IA n'est pas autorisée pour ce document.")
 
-    if not os.path.exists(doc.chemin_fichier):
-        raise HTTPException(status_code=404, detail="Fichier introuvable sur le serveur.")
-
     if doc.type_doc not in ["application/pdf", "image/jpeg", "image/png"]:
         raise HTTPException(status_code=400, detail="Type de fichier non supporté par l'IA (PDF et images uniquement).")
 
     try:
+        import io
+        import httpx
+
         texte = ""
         if doc.type_doc == "application/pdf":
-            doc_pdf = fitz.open(doc.chemin_fichier)
+            response = httpx.get(doc.chemin_fichier)
+            doc_pdf = fitz.open(stream=io.BytesIO(response.content), filetype="pdf")
             for page in doc_pdf:
                 texte += page.get_text()
             doc_pdf.close()
