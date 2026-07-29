@@ -154,12 +154,12 @@ const closeDepot = () => {
 const filtreActivite = ref('Tous')
 
 const typesActivite = [
-  { label: 'Tous', value: 'Tous' },
-  { label: 'Uploads', value: 'upload' },
-  { label: 'Consultations', value: 'consultation' },
-  { label: 'Téléchargements', value: 'telechargement' },
-  { label: 'Invitations', value: 'invitation' },
-  { label: 'Adhésions', value: 'adhesion' },
+  { label: 'Tous', value: 'Tous', icon: 'ti-list' },
+  { label: 'Téléversements', value: 'upload', icon: 'ti-upload' },
+  { label: 'Consultations', value: 'consultation', icon: 'ti-eye' },
+  { label: 'Téléchargements', value: 'telechargement', icon: 'ti-download' },
+  { label: 'Invitations', value: 'invitation', icon: 'ti-user-plus' },
+  { label: 'Adhésions', value: 'adhesion', icon: 'ti-user-check' },
 ]
 
 const onTabChange = (tab) => {
@@ -368,7 +368,7 @@ const formatDate = (d) => {
 
       <div class="tab-content">
         <!-- Onglet Documents -->
-        <div v-if="selectedDepot.activeTab === 'Documents'">
+        <div v-if="selectedDepot.activeTab === 'Documents'" class="tab-pane">
           <div class="tab-actions" v-if="peutEcrire">
             <button class="btn-primary" @click="openAddDocModal">
               <i class="ti ti-plus"></i> Ajouter un document
@@ -402,7 +402,7 @@ const formatDate = (d) => {
         </div>
 
         <!-- Onglet Membres -->
-        <div v-if="selectedDepot.activeTab === 'Membres'">
+        <div v-if="selectedDepot.activeTab === 'Membres'" class="tab-pane">
           <div class="table-responsive">
           <table class="members-table">
             <thead>
@@ -458,11 +458,11 @@ const formatDate = (d) => {
         </div>
 
               <!-- Onglet Activité -->
-        <div v-if="selectedDepot.activeTab === 'Activité'">
+        <div v-if="selectedDepot.activeTab === 'Activité'" class="tab-pane">
           <div v-if="isLoadingActivites" class="skeleton-list">
             <div class="skeleton-item" v-for="i in 4" :key="i"></div>
           </div>
-          <div v-else>
+          <div v-else class="activites-container">
             <!-- Filtres par type -->
             <div class="activite-filters">
               <button
@@ -471,7 +471,7 @@ const formatDate = (d) => {
                 :class="['pill', { active: filtreActivite === type.value }]"
                 @click="filtreActivite = type.value; activitesPage = 1"
               >
-                {{ type.label }}
+                <i :class="['ti', type.icon]"></i> {{ type.label }}
               </button>
             </div>
 
@@ -638,6 +638,8 @@ const formatDate = (d) => {
 .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
 .tab-content { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.tab-pane { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.activites-container { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .tab-actions { margin-bottom: 16px; flex-shrink: 0; }
 .docs-list-wrapper { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .docs-list { display: flex; flex-direction: column; gap: 8px; flex: 1; overflow-y: auto; min-height: 0; }
@@ -685,8 +687,39 @@ const formatDate = (d) => {
 .activite-filters {
   display: flex;
   flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  padding: 8px 16px;
+  border-radius: 30px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pill:hover {
+  background-color: rgba(244, 180, 0, 0.05);
+  color: var(--text-primary);
+  border-color: rgba(244, 180, 0, 0.3);
+}
+
+.pill.active {
+  background-color: rgba(244, 180, 0, 0.15);
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.pill i {
+  font-size: 16px;
 }
 
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
