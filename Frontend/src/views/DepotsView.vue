@@ -48,9 +48,14 @@ const paginatedDocs = computed(() => {
   return docs.slice(start, start + docsPerPage)
 })
 
+const activitesFiltrees = computed(() => {
+  if (filtreActivite.value === 'Tous') return activites.value
+  return activites.value.filter(a => a.type_action === filtreActivite.value)
+})
+
 const paginatedActivites = computed(() => {
   const start = (activitesPage.value - 1) * activitesPerPage
-  return activites.value.slice(start, start + activitesPerPage)
+  return activitesFiltrees.value.slice(start, start + activitesPerPage)
 })
 
 // Permission de l'utilisateur connecté dans le dépôt sélectionné
@@ -145,6 +150,17 @@ const closeDepot = () => {
   activites.value = []
   fetchDepots()
 }
+
+const filtreActivite = ref('Tous')
+
+const typesActivite = [
+  { label: 'Tous', value: 'Tous' },
+  { label: 'Uploads', value: 'upload' },
+  { label: 'Consultations', value: 'consultation' },
+  { label: 'Téléchargements', value: 'telechargement' },
+  { label: 'Invitations', value: 'invitation' },
+  { label: 'Adhésions', value: 'adhesion' },
+]
 
 const onTabChange = (tab) => {
   selectedDepot.value.activeTab = tab
@@ -373,6 +389,7 @@ const formatDate = (d) => {
                   <span class="doc-name">{{ doc.nom_doc }}</span>
                   <span class="doc-meta">{{ doc.categorie }} • {{ new Date(doc.date_ajout).toLocaleDateString('fr-FR') }}</span>
                 </div>
+
                 <span :class="['badge', doc.status === 'Valide' ? 'badge-valide' : 'badge-expire']">{{ doc.status }}</span>
                 <div class="doc-actions-inline">
                   <button class="action-btn" title="Aperçu" @click="previewDoc(doc)"><i class="ti ti-eye"></i></button>
@@ -440,36 +457,55 @@ const formatDate = (d) => {
           </div>
         </div>
 
-        <!-- Onglet Activité -->
+              <!-- Onglet Activité -->
         <div v-if="selectedDepot.activeTab === 'Activité'">
           <div v-if="isLoadingActivites" class="skeleton-list">
             <div class="skeleton-item" v-for="i in 4" :key="i"></div>
           </div>
-          <div v-else-if="activites.length === 0" class="empty-state">
-            <i class="ti ti-activity"></i>
-            <p>Aucune activité enregistrée</p>
-          </div>
-          <div v-else class="activites-list-wrapper">
-            <div class="activites-list">
-              <div class="activite-item" v-for="(log, idx) in paginatedActivites" :key="idx">
-                <div class="activite-icon">
-                  <i :class="['ti', getActionIcon(log.type_action)]"></i>
-                </div>
-                <div class="activite-content">
-                  <span class="activite-detail">{{ log.detail || log.type_action }}</span>
-                  <span class="activite-doc" v-if="log.nom_document">📄 {{ log.nom_document }}</span>
-                  <span class="activite-meta">
-                    {{ log.user?.prenom }} {{ log.user?.nom }} • {{ formatDate(log.date_action) }}
-                  </span>
+          <div v-else>
+            <!-- Filtres par type -->
+            <div class="activite-filters">
+              <button
+                v-for="type in typesActivite"
+                :key="type.value"
+                :class="['pill', { active: filtreActivite === type.value }]"
+                @click="filtreActivite = type.value; activitesPage = 1"
+              >
+                {{ type.label }}
+              </button>
+            </div>
+
+            <div v-if="activitesFiltrees.length === 0" class="empty-state">
+              <i class="ti ti-activity"></i>
+              <p>Aucune activité pour ce filtre</p>
+            </div>
+
+            <div v-else class="activites-list-wrapper">
+              <div class="activites-list">
+                <div class="activite-item" v-for="(log, idx) in paginatedActivites" :key="idx">
+                  <div class="activite-icon">
+                    <i :class="['ti', getActionIcon(log.type_action)]"></i>
+                  </div>
+                  <div class="activite-content">
+                    <span class="activite-detail">{{ log.detail || log.type_action }}</span>
+                    <span class="activite-doc" v-if="log.nom_document">📄 {{ log.nom_document }}</span>
+                    <span class="activite-meta">
+                      {{ log.user?.prenom }} {{ log.user?.nom }} • {{ formatDate(log.date_action) }}
+                    </span>
+                  </div>
                 </div>
               </div>
+              <Pagination
+                :total="activitesFiltrees.length"
+                :perPage="activitesPerPage"
+                v-model:currentPage="activitesPage"
+              />
             </div>
-            <Pagination :total="activites.length" :perPage="activitesPerPage" v-model:currentPage="activitesPage" />
           </div>
         </div>
       </div>
     </div>
-
+    
     <!-- Modal Créer Dépôt -->
     <div v-if="isCreateModalOpen" class="modal-overlay" @click.self="isCreateModalOpen = false">
       <div class="modal-content">
@@ -646,6 +682,12 @@ const formatDate = (d) => {
 .text-warning { color: #F59E0B; }
 .text-danger { color: var(--danger); }
 .text-secondary { color: var(--text-secondary); }
+.activite-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
 
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
 .modal-content { background-color: var(--bg-card); padding: 32px; border-radius: 18px; width: 100%; max-width: 450px; }
