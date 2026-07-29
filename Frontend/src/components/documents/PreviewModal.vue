@@ -61,8 +61,9 @@ const convertFile = async () => {
   }
 }
 
-import * as pdfjsLib from 'pdfjs-dist'
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
 
 const pdfCanvas = ref(null)
 const currentPage = ref(1)
