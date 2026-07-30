@@ -120,3 +120,54 @@ def verify_login_2fa(request: Verify2FARequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user": user
     }
+
+# ── MOT DE PASSE OUBLIÉ ───────────────────────────────────────────────────────
+@router.post("/forgot-password", status_code=200)
+async def forgot_password(payload: dict, db: Session = Depends(get_db)):
+    mail = payload.get("mail")
+    if not mail:
+        raise HTTPException(status_code=400, detail="Email requis.")
+
+    user = db.query(User).filter(User.mail == mail, User.est_actif == True).first()
+    if not user:
+        # On retourne succès même si l'email n'existe pas (sécurité)
+        return {"message": "Si cet email existe, un code a été envoyé."}
+
+    code = generate_2fa_code()
+    user.fa_code = code
+    user.fa_expire = datetime.utcnow() + timedelta(minutes=10)
+    db.commit()
+
+    await send_2fa_email(mail, code)
+    return {"message": "Si cet email existe, un code a été envoyé."}
+
+
+# ── RÉINITIALISATION MOT DE PASSE ─────────────────────────────────────────────
+@router.post("/reset-password", status_code=200)
+def reset_password(payload: dict, db: Session = Depends(get_db)):
+    mail = payload.get("mail")
+    code = payload.get("code")
+    new_password = payload.get("new_password")
+
+    if not all([mail, code, new_password]):
+        raise HTTPException(status_code=400, detail="Tous les champs sont requis.")
+
+    if len(new_password) < 8:
+        raise HTTPException(status_code=400, detail="Le mot de passe doit faire au moins 8 caractères.")
+
+    user = db.query(User).filter(User.mail == mail).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable.")
+
+    if user.fa_code != code:
+        raise HTTPException(status_code=400, detail="Code invalide.")
+
+    if user.fa_expire is None or user.fa_expire < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Code expiré.")
+
+    user.pswd = hash_password(new_password)
+    user.fa_code = None
+    user.fa_expire = None
+    db.commit()
+
+    return {"message": "Mot de passe réinitialisé avec succès."}
