@@ -10,31 +10,6 @@ from app.models.notification import Notification
 from app.models.journal_acces import JournalAcces
 
 router = APIRouter()
-@router.post("/init-admin-setup-x7k2")
-def init_admin(db: Session = Depends(get_db)):
-    from app.models.document import Document
-    from app.models.depot import Depot
-    from app.models.share import Share
-    from app.models.notification import Notification
-    from app.models.journal_acces import JournalAcces
-    from app.models.activity_log import ActivityLog
-
-    # Vérifier si un admin existe déjà
-    existing = db.query(User).filter(User.role == "admin").first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Un admin existe déjà.")
-
-    admin = User(
-        nom="Admin",
-        prenom="Super",
-        mail="admin@filesafe.com",
-        pswd=hash_password("motdepassefort"),
-        est_actif=True,
-        role="admin"
-    )
-    db.add(admin)
-    db.commit()
-    return {"message": "Admin créé avec succès."}
 
 # ── DÉPENDANCE ADMIN ─────────────────────────────────────────────────────────
 async def require_admin(current_user: User = Depends(get_current_user)):
