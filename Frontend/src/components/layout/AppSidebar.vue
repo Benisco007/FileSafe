@@ -43,10 +43,7 @@ const handleLogout = () => {
 
     <!-- LOGO -->
     <div class="logo">
-      <div class="logo-icon">
-        <i class="ti ti-lock"></i>
-      </div>
-      <span class="logo-name">FileSafe</span>
+      <img src="/logo.png" alt="FileSafe Logo" class="logo-img" />
     </div>
 
     <!-- NAVIGATION PRINCIPALE -->
@@ -115,21 +112,9 @@ const handleLogout = () => {
   padding: 8px 10px;
   margin-bottom: 28px;
 }
-.logo-icon {
-  width: 34px;
-  height: 34px;
-  background: var(--primary);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--bg-primary);
-  font-size: var(--icon-logo);
-}
-.logo-name {
-  font-size: var(--font-logo);
-  font-weight: 500;
-  color: var(--text-primary);
+.logo-img {
+  height: 40px;
+  object-fit: contain;
 }
 
 .nav-main {

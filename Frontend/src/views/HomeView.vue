@@ -49,7 +49,7 @@ const formatBytes = (bytes, decimals = 2) => {
   <div class="home-view">
     <div class="header">
       <div class="greeting">
-        <h1>Bonjour, {{ prenom }} 👋</h1>
+        <h1>Bonjour, {{ prenom }} </h1>
         <p class="date">{{ dateDuJour }}</p>
       </div>
       <button class="btn-primary" @click="isUploadModalOpen = true">

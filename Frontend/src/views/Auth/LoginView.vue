@@ -77,8 +77,7 @@ const handleLogin = async () => {
     <!-- Colonne Gauche -->
     <div class="auth-left">
       <div class="brand">
-        <i class="ti ti-lock brand-icon"></i>
-        <span class="brand-name">FileSafe</span>
+        <img src="/logo.png" alt="FileSafe Logo" class="brand-logo-img" />
       </div>
       
       <div class="hero-content">
@@ -120,7 +119,7 @@ const handleLogin = async () => {
         </div>
 
         <div class="form-container">
-          <h2>Heureux de vous revoir 👋</h2>
+          <h2>Heureux de vous revoir </h2>
           
           <form @submit.prevent="handleLogin" class="auth-form">
             <div class="form-group">
@@ -184,18 +183,11 @@ const handleLogin = async () => {
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
-.brand-icon {
-  font-size: 32px;
-  color: var(--primary);
-}
-
-.brand-name {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
+.brand-logo-img {
+  height: 50px;
+  object-fit: contain;
 }
 
 .hero-content {

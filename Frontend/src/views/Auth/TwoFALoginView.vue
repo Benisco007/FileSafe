@@ -55,8 +55,7 @@ const verify = async () => {
   <div class="twofa-page">
     <div class="twofa-card">
       <div class="logo">
-        <div class="logo-icon"><i class="ti ti-lock"></i></div>
-        <span>FileSafe</span>
+        <img src="/logo.png" alt="FileSafe Logo" class="brand-logo-img" />
       </div>
       <div class="shield-icon"><i class="ti ti-shield-check"></i></div>
       <h1>Vérification en deux étapes</h1>
@@ -114,17 +113,12 @@ const verify = async () => {
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
   margin-bottom: 8px;
 }
-.logo-icon {
-  width: 34px; height: 34px;
-  background: var(--primary);
-  border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  color: #121212; font-size: 18px;
+.brand-logo-img {
+  height: 50px;
+  object-fit: contain;
 }
-.logo span { font-size: 18px; font-weight: 500; color: var(--text-primary); }
 .shield-icon { font-size: 52px; color: var(--primary); }
 h1 { font-size: 20px; font-weight: 500; color: var(--text-primary); text-align: center; }
 p { font-size: 13px; color: var(--text-secondary); text-align: center; }
