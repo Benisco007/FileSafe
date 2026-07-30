@@ -133,7 +133,7 @@ const handleLogin = async () => {
             <div class="form-group">
               <div class="label-row">
                 <label>Mot de passe</label>
-                <a href="#" class="forgot-link">Mot de passe oublié ?</a>
+                  <a href="#" class="forgot-link" @click.prevent="router.push('/forgot-password')">Mot de passe oublié ?</a>
               </div>
               <div class="input-wrapper">
                 <i class="ti ti-lock input-icon"></i>

@@ -15,6 +15,9 @@ import SettingsView from '../views/SettingsView.vue'
 import AdminView from '../views/AdminView.vue'
 import OfflineView from '../views/OfflineView.vue'
 import AIView from '../views/AIView.vue'
+import ForgotPasswordView from '../views/Auth/ForgotPasswordView.vue'
+import ResetPasswordView from '../views/Auth/ResetPasswordView.vue'
+
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -40,7 +43,9 @@ const router = createRouter({
 
     { path: '/ai', name: 'ai', component: AIView, meta: { requiresAuth: true } },
     // Redirect par défaut
-    { path: '/:pathMatch(.*)*', redirect: '/login' }
+    { path: '/:pathMatch(.*)*', redirect: '/login' },
+    { path: '/forgot-password', name: 'forgot-password', component: ForgotPasswordView },
+    { path: '/reset-password', name: 'reset-password', component: ResetPasswordView },
   ]
 })
 
@@ -48,7 +53,7 @@ router.beforeEach((to) => {
   const authStore = useAuthStore()
 
   // Routes publiques : pas de vérification d'auth
-  const publicRoutes = ['share-access', 'login', 'register', '2fa', '2fa-login']
+  const publicRoutes = ['share-access', 'login', 'register', '2fa', '2fa-login', 'forgot-password', 'reset-password']
   if (publicRoutes.includes(to.name)) return
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
