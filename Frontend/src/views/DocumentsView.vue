@@ -95,7 +95,7 @@ const toggleCritique = async (doc) => {
 const toggleIA = async (doc) => {
   try {
     await api.patch(`/api/documents/${doc.id_doc}/autoriser-ia`)
-    doc.autorise_ia = !doc.autorise_ia
+    doc.autorisation_ia = !doc.autorisation_ia
   } catch (err) {
     console.error(err)
   }
@@ -246,7 +246,7 @@ const previewDoc = async (doc) => {
               <i class="ti ti-wifi-off"></i>
             </button>
             <button 
-              :class="['action-btn', { active: doc.autorise_ia }]" 
+              :class="['action-btn', { active: doc.autorisation_ia }]" 
               title="Autoriser l'analyse IA"
               @click="toggleIA(doc)"
             >

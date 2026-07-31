@@ -52,7 +52,11 @@ const handleGenerateLink = async () => {
   let dureeHeures = 24
   if (duree.value === '1h') dureeHeures = 1
   if (duree.value === '7j') dureeHeures = 168
-  if (duree.value === 'perso') dureeHeures = joursPersonnalises.value * 24
+  if (duree.value === 'perso') {
+    const val = Math.min(100, Math.max(1, joursPersonnalises.value || 1))
+    joursPersonnalises.value = val
+    dureeHeures = val * 24
+  }
 
   const docId = currentDocument.value.id_doc
   if (!docId) {
@@ -161,7 +165,7 @@ const formatDate = (dateString) => {
               </label>
               <label class="radio-label custom-days">
                 <input type="radio" v-model="duree" value="perso"> Personnalisé 
-                <input type="number" v-model="joursPersonnalises" min="1" :disabled="duree !== 'perso'" class="small-input"> jours
+                <input type="number" v-model="joursPersonnalises" min="1" max="100" :disabled="duree !== 'perso'" class="small-input"> jours
               </label>
             </div>
           </div>
@@ -213,10 +217,7 @@ const formatDate = (dateString) => {
           </div>
           <p class="copy-feedback" v-if="copySuccess">Copié !</p>
           
-          <div class="share-details">
-            <p>Expire le : <strong>{{ formatDate(shareDetails?.expire_le) }}</strong></p>
-            <p>Téléchargement : <strong>{{ peutTelecharger ? 'Autorisé' : 'Lecture seule' }}</strong></p>
-          </div>
+
         </div>
         
         <div class="modal-footer justify-center">

@@ -1,11 +1,8 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useTheme } from '@/composables/useTheme'
 import api from '../api'
 import PreviewModal from '../components/documents/PreviewModal.vue'
 import Pagination from '../components/shared/Pagination.vue'
-
-const { isDark, toggleTheme } = useTheme()
 
 // ─── État de chargement ───────────────────────────────────────────
 const isLoading = ref(true)
@@ -96,14 +93,6 @@ onMounted(async () => {
       <div class="header-left">
         <h1>Hors ligne</h1>
         <p class="subtitle">Vos documents accessibles sans connexion internet</p>
-      </div>
-      <div class="header-right">
-        <button class="btn-icon" :title="isDark ? 'Mode clair' : 'Mode sombre'" @click="toggleTheme">
-          <i :class="isDark ? 'ti ti-sun' : 'ti ti-moon'"></i>
-        </button>
-        <button class="btn-icon" title="Paramètres" @click="$router.push('/settings')">
-          <i class="ti ti-settings"></i>
-        </button>
       </div>
     </div>
 
