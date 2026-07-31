@@ -215,7 +215,7 @@ const downloadDoc = async (doc) => {
               <div class="form-group">
                 <label>Adresse Email</label>
                 <input type="email" :value="user.mail || user.email || 'john@example.com'" readonly disabled>
-                <p class="help-text">L'adresse email ne peut pas être modifiée directement.</p>
+                <p class="help-text">L'adresse email ne peut pas être modifiée.</p>
               </div>
               
               <div class="profile-actions">
