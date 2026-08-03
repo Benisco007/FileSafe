@@ -9,6 +9,7 @@ const authStore = useAuthStore()
 const isLoading = ref(true)
 const stats = ref(null)
 const isUploadModalOpen = ref(false)
+const showScoreInfo = ref(false)
 
 const prenom = authStore.user?.prenom || 'Utilisateur'
 const dateDuJour = new Intl.DateTimeFormat('fr-FR', {
@@ -103,7 +104,20 @@ const formatBytes = (bytes, decimals = 2) => {
         <div class="main-column">
           <!-- Score Documentaire -->
           <div class="score-card">
-            <h2>Score Documentaire</h2>
+            <div class="score-header">
+              <h2>Score Documentaire</h2>
+              <button class="info-btn" @click="showScoreInfo = !showScoreInfo" title="Explication du score">
+                <i class="ti ti-info-circle"></i>
+              </button>
+            </div>
+            
+            <div v-if="showScoreInfo" class="score-info-banner">
+              <p>
+                Le score documentaire représente le pourcentage de vos documents critiques qui sont à jour (non expirés). Ajoutez des documents critiques et veillez à ce que leurs dates d'expiration soient futures pour maintenir un score élevé.
+              </p>
+              <button class="close-info-btn" @click="showScoreInfo = false">Fermer</button>
+            </div>
+
             <div class="score-circle">
               <svg viewBox="0 0 36 36" class="circular-chart">
                 <path class="circle-bg"
@@ -310,11 +324,80 @@ const formatBytes = (bytes, decimals = 2) => {
   justify-content: center;
 }
 
-.score-card h2 {
+.score-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.score-header h2 {
   font-size: 18px;
   color: var(--text-primary);
+  margin: 0;
+}
+
+.info-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.info-btn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--primary);
+}
+
+.score-info-banner {
+  background-color: rgba(244, 180, 0, 0.08);
+  border: 1.5px solid rgba(244, 180, 0, 0.2);
+  border-radius: 12px;
+  padding: 14px;
   margin-bottom: 20px;
-  align-self: flex-start;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  width: 100%;
+  animation: slideDown 0.25s ease-out;
+}
+
+.score-info-banner p {
+  margin: 0 0 8px 0;
+}
+
+.close-info-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.close-info-btn:hover {
+  text-decoration: underline;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .score-circle {
